@@ -26,7 +26,7 @@ const { useState, useMemo, useRef, useEffect } = React;
 /* ---------------- Supabase (Auth) ---------------- */
 const SUPABASE_URL = "https://vfkuaplziaqwyxqhxnrp.supabase.co";
 const SUPABASE_ANON_KEY = "sb_publishable_8u4-CdpBPB4ZC2LjyrlwxA_ChjZDtK-";
-const supabase = window.supabase ? window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY) : null;
+const sbClient = window.supabase ? window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY) : null;
 
 // Mapa de permissões por perfil (staff_role no banco). Controla quais abas cada perfil enxerga.
 // Isso é um gate de UI: a proteção de verdade (linha a linha, por RLS no Postgres) é um passo seguinte —
@@ -4341,9 +4341,9 @@ function LoginScreen({onLoggedIn}) {
 
   async function handleSubmit(e){
     e.preventDefault();
-    if (!supabase) { setErro("Cliente Supabase não carregou. Verifique sua conexão e recarregue a página."); return; }
+    if (!sbClient) { setErro("Cliente Supabase não carregou. Verifique sua conexão e recarregue a página."); return; }
     setErro(""); setCarregando(true);
-    const { data, error } = await supabase.auth.signInWithPassword({ email, password: senha });
+    const { data, error } = await sbClient.auth.signInWithPassword({ email, password: senha });
     setCarregando(false);
     if (error) { setErro(error.message === "Invalid login credentials" ? "E-mail ou senha inválidos." : error.message); return; }
     onLoggedIn(data.session);
@@ -4380,9 +4380,9 @@ function AuthGate() {
   const [erroPerfil, setErroPerfil] = useState("");
 
   useEffect(() => {
-    if (!supabase) { setSession(null); return; }
-    supabase.auth.getSession().then(({data}) => setSession(data.session || null));
-    const { data: listener } = supabase.auth.onAuthStateChange((_event, s) => setSession(s || null));
+    if (!sbClient) { setSession(null); return; }
+    sbClient.auth.getSession().then(({data}) => setSession(data.session || null));
+    const { data: listener } = sbClient.auth.onAuthStateChange((_event, s) => setSession(s || null));
     return () => listener?.subscription?.unsubscribe();
   }, []);
 
@@ -4390,7 +4390,7 @@ function AuthGate() {
     if (!session) { setProfile(session === null ? null : undefined); return; }
     setProfile(undefined);
     setErroPerfil("");
-    supabase.from("staff_profiles").select("*").eq("id", session.user.id).maybeSingle()
+    sbClient.from("staff_profiles").select("*").eq("id", session.user.id).maybeSingle()
       .then(({data, error}) => {
         if (error) { setErroPerfil(error.message); setProfile(null); return; }
         setProfile(data || null);
@@ -4398,7 +4398,7 @@ function AuthGate() {
   }, [session]);
 
   function handleLogout(){
-    if (supabase) supabase.auth.signOut();
+    if (sbClient) sbClient.auth.signOut();
     setSession(null);
     setProfile(undefined);
   }
