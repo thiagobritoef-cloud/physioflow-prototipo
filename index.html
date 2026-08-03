@@ -1473,7 +1473,7 @@ function ClientList({clients, professionals, onNew, onEdit, onViewProfile, onImp
       <div className="flex items-center justify-between mb-3">
         <h2 className="text-lg font-semibold text-slate-800">Clientes ({clients.length})</h2>
         <div className="flex gap-2">
-          <button onClick={onImportarLote} className="px-3 py-2 text-sm rounded-lg border border-slate-300 text-slate-600 hover:bg-slate-50">Importar em lote (XML)</button>
+          <button onClick={onImportarLote} className="px-3 py-2 text-sm rounded-lg border border-slate-300 text-slate-600 hover:bg-slate-50">Importar em lote (CSV)</button>
           <button onClick={onNew} className="px-3 py-2 text-sm rounded-lg bg-teal-600 text-white hover:bg-teal-700">+ Novo cliente</button>
         </div>
       </div>
@@ -1511,23 +1511,9 @@ function ClientList({clients, professionals, onNew, onEdit, onViewProfile, onImp
   );
 }
 
-const MODELO_CLIENTES_XML = `<?xml version="1.0" encoding="UTF-8"?>
-<pacientes>
-  <paciente>
-    <nome>Maria da Silva</nome>
-    <cpf>123.456.789-00</cpf>
-    <convenio>Amil</convenio>
-    <email>maria.silva@email.com</email>
-    <telefone>(11) 91234-5678</telefone>
-  </paciente>
-  <paciente>
-    <nome></nome>
-    <cpf></cpf>
-    <convenio></convenio>
-    <email></email>
-    <telefone></telefone>
-  </paciente>
-</pacientes>`;
+const MODELO_CLIENTES_CSV = `nome,cpf,convenio,email,telefone
+Maria da Silva,123.456.789-00,Amil,maria.silva@email.com,(11) 91234-5678
+,,,,`;
 
 function ImportClientesModal({onClose, onImportar}) {
   const [registros, setRegistros] = useState([]);
@@ -1538,7 +1524,7 @@ function ImportClientesModal({onClose, onImportar}) {
   const textareaRef = useRef(null);
 
   function baixarModelo(){
-    baixarArquivo("modelo_importacao_pacientes.xml", MODELO_CLIENTES_XML, "application/xml");
+    baixarArquivo("modelo_importacao_pacientes.csv", MODELO_CLIENTES_CSV, "text/csv");
   }
 
   function copiarModelo(){
@@ -1556,33 +1542,33 @@ function ImportClientesModal({onClose, onImportar}) {
     setNomeArquivo(file.name);
     const reader = new FileReader();
     reader.onload = (ev) => {
-      const { erro: err, registros: regs } = parseClientesXML(String(ev.target.result || ""));
+      const { erro: err, registros: regs } = parseClientesCSV(String(ev.target.result || ""));
       if (err) { setErro(err); setRegistros([]); }
-      else if (regs.length === 0) { setErro("Nenhum <paciente> com nome preenchido foi encontrado no arquivo."); setRegistros([]); }
+      else if (regs.length === 0) { setErro("Nenhuma linha com nome preenchido foi encontrada no arquivo."); setRegistros([]); }
       else { setErro(""); setRegistros(regs); }
     };
     reader.readAsText(file, "UTF-8");
   }
 
   return (
-    <Modal title="Importar pacientes em lote (XML)" onClose={onClose} wide>
+    <Modal title="Importar pacientes em lote (CSV)" onClose={onClose} wide>
       <div className="bg-slate-50 rounded-lg p-3 mb-3 text-xs text-slate-600">
-        <p className="mb-2">Baixe o modelo XML, preencha nome, CPF, convênio, e-mail e telefone para cada paciente (um bloco <code>&lt;paciente&gt;</code> por pessoa) e envie o arquivo preenchido de volta aqui. Pacientes com CPF já cadastrado são atualizados; os demais são criados.</p>
+        <p className="mb-2">Baixe o modelo CSV, preencha nome, CPF, convênio, e-mail e telefone para cada paciente (uma linha por pessoa) e envie o arquivo preenchido de volta aqui. Pacientes com CPF já cadastrado são atualizados; os demais são criados.</p>
         <div className="flex flex-wrap gap-2 items-center">
-          <button type="button" onClick={baixarModelo} className="px-3 py-1.5 text-xs rounded-lg border border-teal-300 text-teal-700 hover:bg-teal-50">Baixar modelo XML</button>
+          <button type="button" onClick={baixarModelo} className="px-3 py-1.5 text-xs rounded-lg border border-teal-300 text-teal-700 hover:bg-teal-50">Baixar modelo CSV</button>
           <button type="button" onClick={()=>setMostrarTexto(v=>!v)} className="px-3 py-1.5 text-xs rounded-lg border border-slate-300 text-slate-600 hover:bg-white">{mostrarTexto ? "Ocultar" : "Não abriu? Ver/copiar o texto do modelo"}</button>
         </div>
         {mostrarTexto && (
           <div className="mt-2">
-            <p className="text-[11px] text-slate-500 mb-1">Selecione tudo e copie, cole em um editor de texto (TextEdit, VS Code) e salve o arquivo com extensão <code>.xml</code>. Ao abrir o arquivo baixado, evite dar duplo clique nele no Finder — isso pode chamar um app que não sabe exibir XML puro (ex.: Numbers/Preview). Abra com "TextEdit" (clique com o botão direito → Abrir Com) para conferir o conteúdo.</p>
-            <textarea ref={textareaRef} readOnly rows={9} value={MODELO_CLIENTES_XML} onClick={e=>e.target.select()}
+            <p className="text-[11px] text-slate-500 mb-1">Selecione tudo e copie, cole em uma planilha (Excel, Numbers, Google Sheets) ou editor de texto e salve/exporte o arquivo com extensão <code>.csv</code>. A primeira linha é o cabeçalho (nome,cpf,convenio,email,telefone) — as colunas podem vir em qualquer ordem, desde que os nomes do cabeçalho sejam mantidos.</p>
+            <textarea ref={textareaRef} readOnly rows={4} value={MODELO_CLIENTES_CSV} onClick={e=>e.target.select()}
               className="w-full font-mono text-[11px] border border-slate-300 rounded-lg p-2 bg-white" />
             <button type="button" onClick={copiarModelo} className="mt-1 px-3 py-1.5 text-xs rounded-lg bg-teal-600 text-white hover:bg-teal-700">{copiado ? "Copiado!" : "Copiar texto"}</button>
           </div>
         )}
       </div>
-      <Field label="Selecionar arquivo XML preenchido">
-        <input type="file" accept=".xml,text/xml" onChange={handleFile} className={inputCls} />
+      <Field label="Selecionar arquivo CSV preenchido">
+        <input type="file" accept=".csv,text/csv" onChange={handleFile} className={inputCls} />
       </Field>
       {nomeArquivo && <p className="text-[11px] text-slate-400 mb-2">Arquivo selecionado: {nomeArquivo}</p>}
       {erro && <div className="bg-red-50 border border-red-200 text-red-700 text-xs rounded-lg p-2 mb-3">⚠ {erro}</div>}
@@ -3183,21 +3169,54 @@ function parseImportTuss(texto){
     .filter(r => r.codigoTUSS);
 }
 
-// Lê um XML no formato <pacientes><paciente><nome/><cpf/><convenio/><email/><telefone/></paciente>...</pacientes>
-function parseClientesXML(xmlText){
-  const parser = new DOMParser();
-  const doc = parser.parseFromString(xmlText, "application/xml");
-  if (doc.querySelector("parsererror")) {
-    return { erro: "Não foi possível ler o XML — verifique se o arquivo está no formato do modelo.", registros: [] };
+// Lê uma linha de CSV respeitando campos entre aspas (permite vírgula/aspas escapada dentro do campo)
+function parseLinhaCSV(linha){
+  const campos = [];
+  let atual = "";
+  let entreAspas = false;
+  for (let i = 0; i < linha.length; i++) {
+    const ch = linha[i];
+    if (entreAspas) {
+      if (ch === '"') {
+        if (linha[i + 1] === '"') { atual += '"'; i++; }
+        else entreAspas = false;
+      } else atual += ch;
+    } else {
+      if (ch === '"') entreAspas = true;
+      else if (ch === ",") { campos.push(atual); atual = ""; }
+      else atual += ch;
+    }
   }
-  const nos = Array.from(doc.querySelectorAll("paciente"));
-  const registros = nos.map(no => ({
-    nome: no.querySelector("nome")?.textContent?.trim() || "",
-    cpf: no.querySelector("cpf")?.textContent?.trim() || "",
-    convenio: no.querySelector("convenio")?.textContent?.trim() || "",
-    email: no.querySelector("email")?.textContent?.trim() || "",
-    telefone: no.querySelector("telefone")?.textContent?.trim() || "",
-  })).filter(r => r.nome);
+  campos.push(atual);
+  return campos.map(c => c.trim());
+}
+
+// Lê um CSV com cabeçalho nome,cpf,convenio,email,telefone (colunas em qualquer ordem)
+function parseClientesCSV(csvText){
+  const texto = String(csvText || "").replace(/^﻿/, ""); // remove BOM se houver
+  const linhas = texto.split(/\r\n|\r|\n/).filter(l => l.trim().length > 0);
+  if (linhas.length === 0) {
+    return { erro: "O arquivo CSV está vazio.", registros: [] };
+  }
+  const cabecalho = parseLinhaCSV(linhas[0]).map(h => h.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, ""));
+  const idxNome = cabecalho.indexOf("nome");
+  if (idxNome === -1) {
+    return { erro: "Não foi possível ler o CSV — a primeira linha precisa ser o cabeçalho com uma coluna \"nome\", como no modelo.", registros: [] };
+  }
+  const idxCpf = cabecalho.indexOf("cpf");
+  const idxConvenio = cabecalho.indexOf("convenio");
+  const idxEmail = cabecalho.indexOf("email");
+  const idxTelefone = cabecalho.indexOf("telefone");
+  const registros = linhas.slice(1).map(linha => {
+    const campos = parseLinhaCSV(linha);
+    return {
+      nome: (campos[idxNome] || "").trim(),
+      cpf: idxCpf > -1 ? (campos[idxCpf] || "").trim() : "",
+      convenio: idxConvenio > -1 ? (campos[idxConvenio] || "").trim() : "",
+      email: idxEmail > -1 ? (campos[idxEmail] || "").trim() : "",
+      telefone: idxTelefone > -1 ? (campos[idxTelefone] || "").trim() : "",
+    };
+  }).filter(r => r.nome);
   return { erro: null, registros };
 }
 
