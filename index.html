@@ -9,6 +9,7 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.5/babel.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
 <style>
   body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; }
   ::-webkit-scrollbar { height: 8px; width: 8px; }
@@ -21,6 +22,23 @@
 <div id="root"></div>
 <script type="text/babel" data-presets="react">
 const { useState, useMemo, useRef, useEffect } = React;
+
+/* ---------------- Supabase (Auth) ---------------- */
+const SUPABASE_URL = "https://vfkuaplziaqwyxqhxnrp.supabase.co";
+const SUPABASE_ANON_KEY = "sb_publishable_8u4-CdpBPB4ZC2LjyrlwxA_ChjZDtK-";
+const supabase = window.supabase ? window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY) : null;
+
+// Mapa de permissões por perfil (staff_role no banco). Controla quais abas cada perfil enxerga.
+// Isso é um gate de UI: a proteção de verdade (linha a linha, por RLS no Postgres) é um passo seguinte —
+// hoje os dados operacionais (agenda, clientes etc.) ainda vivem no localStorage do navegador.
+const PERMISSOES = {
+  admin:          { label: "Gestor",         tabs: ["agenda","clientes","profissionais","guias","catalogo","caixa","fichas","dashboard","notificacoes"] },
+  recepcao:       { label: "Recepção",       tabs: ["agenda","clientes","guias","caixa","fichas","notificacoes"] },
+  fisioterapeuta: { label: "Fisioterapeuta", tabs: ["agenda","clientes","guias","fichas","dashboard","notificacoes"], agendaSomenteProprio: true },
+  faturamento:    { label: "Faturamento",    tabs: ["clientes","guias","catalogo","dashboard","notificacoes"] },
+  financeiro:     { label: "Financeiro",     tabs: ["caixa","dashboard","notificacoes"] },
+};
+function permissoesDoPerfil(role){ return PERMISSOES[role] || { label: role || "Usuário", tabs: ["agenda","notificacoes"] }; }
 
 /* ---------------- Data/hora de referência ---------------- */
 function isoToday() { return new Date().toISOString().slice(0,10); }
@@ -482,8 +500,12 @@ function Modal({title, onClose, children, wide}) {
 }
 
 /* ---------------- App ---------------- */
-function App() {
-  const [tab, setTab] = useState("agenda");
+function App({currentUser, onLogout}) {
+  const perms = useMemo(() => permissoesDoPerfil(currentUser?.role), [currentUser]);
+  const [tab, setTab] = useState(() => perms.tabs[0] || "agenda");
+  useEffect(() => {
+    if (!perms.tabs.includes(tab)) setTab(perms.tabs[0] || "agenda");
+  }, [perms, tab]);
   const [professionals, setProfessionals] = useState(() => loadPersisted("professionals", initialProfessionals));
   const [clients, setClients] = useState(() => loadPersisted("clients", initialClients));
   const [appointments, setAppointments] = useState(() => loadPersisted("appointments", initialAppointments));
@@ -933,8 +955,19 @@ function App() {
 
   // P0-1 (2.1): unidade como dimensão global — filtra Agenda/Caixa/Dashboard sem afetar a detecção de conflitos
   // (que precisa enxergar TODOS os agendamentos, de todas as unidades, para nunca dar profissional em dobro — RN-2.1.1).
-  const profissionaisNaUnidade = useMemo(() => unidadeFiltro==="todas" ? professionals : professionals.filter(p=>(p.unidadeIds||[]).includes(unidadeFiltro)), [professionals, unidadeFiltro]);
-  const appointmentsNaUnidade = useMemo(() => unidadeFiltro==="todas" ? appointments : appointments.filter(a=>a.unidadeId===unidadeFiltro), [appointments, unidadeFiltro]);
+  const profissionaisNaUnidadeBase = useMemo(() => unidadeFiltro==="todas" ? professionals : professionals.filter(p=>(p.unidadeIds||[]).includes(unidadeFiltro)), [professionals, unidadeFiltro]);
+  const appointmentsNaUnidadeBase = useMemo(() => unidadeFiltro==="todas" ? appointments : appointments.filter(a=>a.unidadeId===unidadeFiltro), [appointments, unidadeFiltro]);
+  // Fisioterapeuta só vê a própria agenda. O vínculo é feito por nome (staff_profiles x professionals) até a
+  // migração de dados para o Supabase ligar as duas tabelas por id de verdade — ver PLANO_MIGRACAO_SUPABASE.md.
+  const profissionaisNaUnidade = useMemo(() => {
+    if (!perms.agendaSomenteProprio) return profissionaisNaUnidadeBase;
+    return profissionaisNaUnidadeBase.filter(p => p.nome === currentUser?.nome);
+  }, [profissionaisNaUnidadeBase, perms, currentUser]);
+  const appointmentsNaUnidade = useMemo(() => {
+    if (!perms.agendaSomenteProprio) return appointmentsNaUnidadeBase;
+    const idsPermitidos = new Set(profissionaisNaUnidade.map(p=>p.id));
+    return appointmentsNaUnidadeBase.filter(a => idsPermitidos.has(a.profissionalId));
+  }, [appointmentsNaUnidadeBase, perms, profissionaisNaUnidade]);
   const lancamentosNaUnidade = useMemo(() => unidadeFiltro==="todas" ? lancamentos : lancamentos.filter(l=>l.unidadeId===unidadeFiltro), [lancamentos, unidadeFiltro]);
   const guiasNaUnidade = useMemo(() => unidadeFiltro==="todas" ? guias : guias.filter(g=>g.unidadePrestadoraId===unidadeFiltro), [guias, unidadeFiltro]);
 
@@ -947,7 +980,8 @@ function App() {
   return (
     <div className="min-h-screen">
       <TopBar tab={tab} setTab={setTab} notifyEnabled={notifyEnabled} setNotifyEnabled={setNotifyEnabled} onReset={resetParaDadosDeExemplo}
-        unidades={unidades} unidadeFiltro={unidadeFiltro} setUnidadeFiltro={setUnidadeFiltro} />
+        unidades={unidades} unidadeFiltro={unidadeFiltro} setUnidadeFiltro={setUnidadeFiltro}
+        currentUser={currentUser} perms={perms} onLogout={onLogout} />
       <main className="max-w-[1500px] mx-auto p-4">
         {tab === "agenda" && (
           <Agenda
@@ -1091,8 +1125,8 @@ function App() {
 }
 
 /* ---------------- TopBar ---------------- */
-function TopBar({tab, setTab, notifyEnabled, setNotifyEnabled, onReset, unidades, unidadeFiltro, setUnidadeFiltro}) {
-  const tabs = [
+function TopBar({tab, setTab, notifyEnabled, setNotifyEnabled, onReset, unidades, unidadeFiltro, setUnidadeFiltro, currentUser, perms, onLogout}) {
+  const todasAbas = [
     {id:"agenda", label:"Agenda"},
     {id:"clientes", label:"Clientes"},
     {id:"profissionais", label:"Profissionais"},
@@ -1103,6 +1137,8 @@ function TopBar({tab, setTab, notifyEnabled, setNotifyEnabled, onReset, unidades
     {id:"dashboard", label:"Dashboard"},
     {id:"notificacoes", label:"Notificações"},
   ];
+  const tabsPermitidas = perms?.tabs || todasAbas.map(t=>t.id);
+  const tabs = todasAbas.filter(t => tabsPermitidas.includes(t.id));
   return (
     <header className="bg-white border-b border-slate-200 sticky top-0 z-40">
       <div className="max-w-[1500px] mx-auto px-4 py-3 flex items-center justify-between flex-wrap gap-2">
@@ -1132,6 +1168,15 @@ function TopBar({tab, setTab, notifyEnabled, setNotifyEnabled, onReset, unidades
             </button>
           </label>
           <button onClick={onReset} className="text-[11px] text-slate-400 hover:text-red-500 underline">Restaurar dados de exemplo</button>
+          {currentUser && (
+            <div className="flex items-center gap-2 pl-3 border-l border-slate-200">
+              <div className="text-right leading-tight">
+                <div className="text-xs font-medium text-slate-700">{currentUser.nome}</div>
+                <div className="text-[10px] text-slate-400">{perms?.label}</div>
+              </div>
+              <button onClick={onLogout} className="text-[11px] text-slate-400 hover:text-red-500 underline">Sair</button>
+            </div>
+          )}
         </div>
       </div>
       <div className="max-w-[1500px] mx-auto px-4 pb-1.5 text-[10px] text-slate-400">Dados salvos automaticamente neste navegador.</div>
@@ -4287,7 +4332,104 @@ function NotificationsPanel({log, notifyEnabled, setNotifyEnabled}) {
   );
 }
 
-ReactDOM.createRoot(document.getElementById("root")).render(<App />);
+/* ---------------- Login (Supabase Auth) ---------------- */
+function LoginScreen({onLoggedIn}) {
+  const [email, setEmail] = useState("");
+  const [senha, setSenha] = useState("");
+  const [erro, setErro] = useState("");
+  const [carregando, setCarregando] = useState(false);
+
+  async function handleSubmit(e){
+    e.preventDefault();
+    if (!supabase) { setErro("Cliente Supabase não carregou. Verifique sua conexão e recarregue a página."); return; }
+    setErro(""); setCarregando(true);
+    const { data, error } = await supabase.auth.signInWithPassword({ email, password: senha });
+    setCarregando(false);
+    if (error) { setErro(error.message === "Invalid login credentials" ? "E-mail ou senha inválidos." : error.message); return; }
+    onLoggedIn(data.session);
+  }
+
+  return (
+    <div className="min-h-screen flex items-center justify-center bg-slate-100 p-4">
+      <form onSubmit={handleSubmit} className="bg-white rounded-2xl shadow-md border border-slate-200 p-8 w-full max-w-sm">
+        <div className="flex items-center gap-2 mb-6 justify-center">
+          <div className="w-9 h-9 rounded-lg bg-teal-600 text-white flex items-center justify-center font-bold">P</div>
+          <span className="font-semibold text-slate-800 text-lg">PhysioFlow</span>
+        </div>
+        <h1 className="text-sm font-medium text-slate-600 mb-4 text-center">Entrar no sistema de agendamento</h1>
+        {erro && <div className="bg-red-50 border border-red-200 text-red-700 text-xs rounded-lg p-3 mb-4">{erro}</div>}
+        <label className="block text-xs font-medium text-slate-600 mb-1">E-mail</label>
+        <input type="email" required value={email} onChange={e=>setEmail(e.target.value)}
+          className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm mb-3" placeholder="voce@grupopelvic.com.br" />
+        <label className="block text-xs font-medium text-slate-600 mb-1">Senha</label>
+        <input type="password" required value={senha} onChange={e=>setSenha(e.target.value)}
+          className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm mb-5" placeholder="••••••••" />
+        <button type="submit" disabled={carregando}
+          className="w-full bg-teal-600 hover:bg-teal-700 disabled:opacity-60 text-white text-sm font-medium rounded-lg py-2.5">
+          {carregando ? "Entrando..." : "Entrar"}
+        </button>
+        <div className="text-[11px] text-slate-400 mt-4 text-center">Não tem acesso? Peça para o gestor da clínica criar seu usuário.</div>
+      </form>
+    </div>
+  );
+}
+
+function AuthGate() {
+  const [session, setSession] = useState(undefined); // undefined = carregando, null = deslogado
+  const [profile, setProfile] = useState(undefined); // undefined = carregando, null = sem perfil, obj = ok
+  const [erroPerfil, setErroPerfil] = useState("");
+
+  useEffect(() => {
+    if (!supabase) { setSession(null); return; }
+    supabase.auth.getSession().then(({data}) => setSession(data.session || null));
+    const { data: listener } = supabase.auth.onAuthStateChange((_event, s) => setSession(s || null));
+    return () => listener?.subscription?.unsubscribe();
+  }, []);
+
+  useEffect(() => {
+    if (!session) { setProfile(session === null ? null : undefined); return; }
+    setProfile(undefined);
+    setErroPerfil("");
+    supabase.from("staff_profiles").select("*").eq("id", session.user.id).maybeSingle()
+      .then(({data, error}) => {
+        if (error) { setErroPerfil(error.message); setProfile(null); return; }
+        setProfile(data || null);
+      });
+  }, [session]);
+
+  function handleLogout(){
+    if (supabase) supabase.auth.signOut();
+    setSession(null);
+    setProfile(undefined);
+  }
+
+  if (session === undefined) {
+    return <div className="min-h-screen flex items-center justify-center text-sm text-slate-400">Carregando...</div>;
+  }
+  if (session === null) {
+    return <LoginScreen onLoggedIn={setSession} />;
+  }
+  if (profile === undefined) {
+    return <div className="min-h-screen flex items-center justify-center text-sm text-slate-400">Carregando perfil...</div>;
+  }
+  if (profile === null) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-slate-100 p-4">
+        <div className="bg-white rounded-2xl shadow-md border border-slate-200 p-8 w-full max-w-sm text-center">
+          <div className="text-sm font-medium text-slate-700 mb-2">Login feito, mas sem perfil de acesso</div>
+          <div className="text-xs text-slate-500 mb-1">Sua conta ({session.user.email}) foi autenticada, mas ainda não existe um perfil (staff_profiles) associado a ela.</div>
+          {erroPerfil && <div className="text-[11px] text-red-500 mb-3">{erroPerfil}</div>}
+          <div className="text-xs text-slate-500 mb-4">Peça para o gestor da clínica cadastrar seu usuário.</div>
+          <button onClick={handleLogout} className="text-xs text-teal-700 underline">Sair</button>
+        </div>
+      </div>
+    );
+  }
+  const currentUser = { id: profile.id, nome: profile.nome || session.user.email, role: profile.role, email: session.user.email };
+  return <App currentUser={currentUser} onLogout={handleLogout} />;
+}
+
+ReactDOM.createRoot(document.getElementById("root")).render(<AuthGate />);
 </script>
 </body>
 </html>
