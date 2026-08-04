@@ -258,7 +258,13 @@ const FORMAS_PAGAMENTO = {
   cartao_credito: "Cartão de Crédito",
   cartao_debito: "Cartão de Débito",
   crediario: "Crediário",
-  transferencia_pix: "Transferência/PIX",
+  pix: "Pix",
+  transferencia: "Transferência",
+};
+
+const ORIGENS_PAGAMENTO = {
+  particular: "Particular",
+  convenio: "Convênio",
 };
 
 const TIPO_LANCAMENTO = {
@@ -269,12 +275,12 @@ const TIPO_LANCAMENTO = {
 };
 
 const lancamentosIniciais = [
-  { id:"l1", data:TODAY, unidadeId:"u1", tipo:"receita", formaPagamento:"dinheiro", valor:150, descricao:"Avaliação inicial - Felipe Rocha" },
-  { id:"l2", data:TODAY, unidadeId:"u1", tipo:"receita", formaPagamento:"cartao_credito", valor:150, descricao:"Sessão pacote - Bruno Cardoso" },
-  { id:"l3", data:TODAY, unidadeId:"u1", tipo:"receita", formaPagamento:"transferencia_pix", valor:110, descricao:"Sessão Pilates - Carla Dias" },
-  { id:"l4", data:TODAY, unidadeId:"u1", tipo:"despesa", formaPagamento:"dinheiro", valor:40, descricao:"Material de limpeza" },
-  { id:"l5", data:TODAY, unidadeId:"u1", tipo:"sangria", formaPagamento:"dinheiro", valor:200, descricao:"Sangria para depósito bancário" },
-  { id:"l6", data:TODAY, unidadeId:"u1", tipo:"reforco", formaPagamento:"dinheiro", valor:100, descricao:"Reforço de troco" },
+  { id:"l1", data:TODAY, unidadeId:"u1", tipo:"receita", formaPagamento:"dinheiro", origemPagamento:"particular", valor:150, descricao:"Avaliação inicial - Felipe Rocha" },
+  { id:"l2", data:TODAY, unidadeId:"u1", tipo:"receita", formaPagamento:"cartao_credito", origemPagamento:"particular", valor:150, descricao:"Sessão pacote - Bruno Cardoso" },
+  { id:"l3", data:TODAY, unidadeId:"u1", tipo:"receita", formaPagamento:"pix", origemPagamento:"convenio", valor:110, descricao:"Sessão Pilates - Carla Dias" },
+  { id:"l4", data:TODAY, unidadeId:"u1", tipo:"despesa", formaPagamento:"dinheiro", origemPagamento:"particular", valor:40, descricao:"Material de limpeza" },
+  { id:"l5", data:TODAY, unidadeId:"u1", tipo:"sangria", formaPagamento:"dinheiro", origemPagamento:"particular", valor:200, descricao:"Sangria para depósito bancário" },
+  { id:"l6", data:TODAY, unidadeId:"u1", tipo:"reforco", formaPagamento:"dinheiro", origemPagamento:"particular", valor:100, descricao:"Reforço de troco" },
 ];
 
 /* ---------------- Fichas de Avaliação (Anamnese) ---------------- */
@@ -995,6 +1001,7 @@ function App({currentUser, onLogout}) {
             onStatusChange={handleStatusChange}
             onMoveProfessional={handleMoveProfessional}
             onNewAppointment={(profId)=>setModal({type:"appt", data:{profissionalId:profId, data:selectedDate, hora:"09:00", status:"agendado", tipo:"sessao", duracaoMin:50, unidadeId:unidadePadraoParaProfissional(profId), clienteId:clients[0]?.id||"", sessaoAtual:1, pagamentoVinculado:false}})}
+            onVenderProduto={perms.tabs.includes("caixa") ? (appt)=>setModal({type:"venderProduto", data:{clienteId:appt.clienteId, unidadeId:appt.unidadeId, data:appt.data}}) : null}
           />
         )}
         {tab === "clientes" && (
@@ -1045,7 +1052,7 @@ function App({currentUser, onLogout}) {
         )}
         {tab === "caixa" && (
           <CaixaPanel lancamentos={lancamentosNaUnidade} fechamentos={fechamentos}
-            onNew={(data)=>setModal({type:"lancamento", data:{data, tipo:"receita", formaPagamento:"dinheiro", valor:0, descricao:"", unidadeId: unidadeFiltro!=="todas"?unidadeFiltro:(unidades[0]?.id||"")}})}
+            onNew={(data)=>setModal({type:"lancamento", data:{data, tipo:"receita", formaPagamento:"dinheiro", origemPagamento:"particular", valor:0, descricao:"", unidadeId: unidadeFiltro!=="todas"?unidadeFiltro:(unidades[0]?.id||"")}})}
             onFechar={fecharCaixa} onReabrir={reabrirCaixa}
           />
         )}
@@ -1101,6 +1108,9 @@ function App({currentUser, onLogout}) {
       )}
       {modal?.type === "lancamento" && (
         <LancamentoModal data={modal.data} unidades={unidades} onClose={()=>setModal(null)} onSave={addLancamento} />
+      )}
+      {modal?.type === "venderProduto" && (
+        <VenderProdutoModal data={modal.data} produtos={produtos} clients={clients} onClose={()=>setModal(null)} onSave={addLancamento} />
       )}
       {modal?.type === "ficha" && (
         <FichaModal data={modal.data} clients={clients} professionals={professionals} modelosFicha={modelosFicha}
@@ -1185,7 +1195,7 @@ function TopBar({tab, setTab, notifyEnabled, setNotifyEnabled, onReset, unidades
 }
 
 /* ---------------- Agenda Kanban ---------------- */
-function Agenda({professionals, clients, appointments, guias, fichas, selectedDate, setSelectedDate, onStatusChange, onMoveProfessional, onNewAppointment}) {
+function Agenda({professionals, clients, appointments, guias, fichas, selectedDate, setSelectedDate, onStatusChange, onMoveProfessional, onNewAppointment, onVenderProduto}) {
   const dragItem = useRef(null);
 
   const apptsByProf = useMemo(() => {
@@ -1329,6 +1339,12 @@ function Agenda({professionals, clients, appointments, guias, fichas, selectedDa
                       className={"mt-2 w-full text-xs font-medium border rounded-md px-2 py-1 " + cfg.badge}>
                       {opcoesStatus.map(k => <option key={k} value={k}>{STATUS_CONFIG[k].label}</option>)}
                     </select>
+                    {cliente && onVenderProduto && (
+                      <button onClick={()=>onVenderProduto(appt)}
+                        className="mt-1.5 w-full text-[11px] font-medium text-teal-700 bg-teal-50 hover:bg-teal-100 rounded-md py-1">
+                        💰 Vender produto
+                      </button>
+                    )}
                   </div>
                 );
               })}
@@ -3600,9 +3616,16 @@ function calcCaixaDia(lancamentos, data){
   const doDia = lancamentos.filter(l => l.data === data);
   const porForma = {};
   Object.keys(FORMAS_PAGAMENTO).forEach(k => porForma[k] = 0);
+  const porOrigem = {};
+  Object.keys(ORIGENS_PAGAMENTO).forEach(k => porOrigem[k] = 0);
   let totalReceitas = 0, totalDespesas = 0, totalSangrias = 0, totalReforcos = 0;
   doDia.forEach(l => {
-    if (l.tipo === "receita") { totalReceitas += l.valor; porForma[l.formaPagamento] = (porForma[l.formaPagamento]||0) + l.valor; }
+    if (l.tipo === "receita") {
+      totalReceitas += l.valor;
+      porForma[l.formaPagamento] = (porForma[l.formaPagamento]||0) + l.valor;
+      const origem = l.origemPagamento || "particular";
+      porOrigem[origem] = (porOrigem[origem]||0) + l.valor;
+    }
     if (l.tipo === "despesa") { totalDespesas += l.valor; }
     if (l.tipo === "sangria") { totalSangrias += l.valor; }
     if (l.tipo === "reforco") { totalReforcos += l.valor; }
@@ -3610,7 +3633,7 @@ function calcCaixaDia(lancamentos, data){
   const despesasDinheiro = doDia.filter(l=>l.tipo==="despesa" && l.formaPagamento==="dinheiro").reduce((s,l)=>s+l.valor,0);
   const valorSistemaDinheiro = (porForma.dinheiro||0) + totalReforcos - despesasDinheiro - totalSangrias;
   const resultadoDia = totalReceitas - totalDespesas;
-  return { doDia, porForma, totalReceitas, totalDespesas, totalSangrias, totalReforcos, valorSistemaDinheiro, resultadoDia };
+  return { doDia, porForma, porOrigem, totalReceitas, totalDespesas, totalSangrias, totalReforcos, valorSistemaDinheiro, resultadoDia };
 }
 
 function CaixaPanel({lancamentos, fechamentos, onNew, onFechar, onReabrir}) {
@@ -3648,30 +3671,44 @@ function CaixaPanel({lancamentos, fechamentos, onNew, onFechar, onReabrir}) {
         <KpiCard label="Resultado do dia" value={fmtBRL(calc.resultadoDia)} tone={calc.resultadoDia>=0?"green":"red"} sub="receitas − despesas" />
       </div>
 
-      <div className="bg-white rounded-xl border border-slate-200 p-4 mb-4">
-        <div className="text-sm font-medium text-slate-700 mb-2">Entradas por forma de pagamento</div>
-        <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-          {Object.entries(FORMAS_PAGAMENTO).map(([k,label]) => (
-            <div key={k} className="border border-slate-100 rounded-lg p-2">
-              <div className="text-[11px] text-slate-400">{label}</div>
-              <div className="text-sm font-semibold text-slate-700">{fmtBRL(calc.porForma[k]||0)}</div>
-            </div>
-          ))}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+        <div className="bg-white rounded-xl border border-slate-200 p-4">
+          <div className="text-sm font-medium text-slate-700 mb-2">Entradas por forma de pagamento</div>
+          <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+            {Object.entries(FORMAS_PAGAMENTO).map(([k,label]) => (
+              <div key={k} className="border border-slate-100 rounded-lg p-2">
+                <div className="text-[11px] text-slate-400">{label}</div>
+                <div className="text-sm font-semibold text-slate-700">{fmtBRL(calc.porForma[k]||0)}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+        <div className="bg-white rounded-xl border border-slate-200 p-4">
+          <div className="text-sm font-medium text-slate-700 mb-2">Entradas por origem</div>
+          <div className="grid grid-cols-2 gap-3">
+            {Object.entries(ORIGENS_PAGAMENTO).map(([k,label]) => (
+              <div key={k} className="border border-slate-100 rounded-lg p-2">
+                <div className="text-[11px] text-slate-400">{label}</div>
+                <div className="text-sm font-semibold text-slate-700">{fmtBRL(calc.porOrigem[k]||0)}</div>
+              </div>
+            ))}
+          </div>
         </div>
       </div>
 
       <div className="bg-white rounded-xl border border-slate-200 overflow-x-auto mb-4">
         <table className="w-full text-sm">
           <thead className="bg-slate-50 text-slate-500 text-xs uppercase">
-            <tr><th className="text-left px-4 py-2">Tipo</th><th className="text-left px-4 py-2">Forma</th><th className="text-left px-4 py-2">Descrição</th><th className="text-right px-4 py-2">Valor</th></tr>
+            <tr><th className="text-left px-4 py-2">Tipo</th><th className="text-left px-4 py-2">Origem</th><th className="text-left px-4 py-2">Forma</th><th className="text-left px-4 py-2">Descrição</th><th className="text-right px-4 py-2">Valor</th></tr>
           </thead>
           <tbody>
-            {calc.doDia.length===0 && <tr><td colSpan="4" className="text-center py-4 text-slate-400">Nenhum lançamento neste dia.</td></tr>}
+            {calc.doDia.length===0 && <tr><td colSpan="5" className="text-center py-4 text-slate-400">Nenhum lançamento neste dia.</td></tr>}
             {calc.doDia.map(l => {
               const cfg = TIPO_LANCAMENTO[l.tipo];
               return (
                 <tr key={l.id} className="border-t border-slate-100">
                   <td className="px-4 py-2"><span className={"text-xs font-medium rounded-full px-2 py-1 " + cfg.badge}>{cfg.label}</span></td>
+                  <td className="px-4 py-2 text-slate-500">{l.tipo==="receita" ? (ORIGENS_PAGAMENTO[l.origemPagamento] || "—") : "—"}</td>
                   <td className="px-4 py-2 text-slate-500">{FORMAS_PAGAMENTO[l.formaPagamento] || "—"}</td>
                   <td className="px-4 py-2 text-slate-600">{l.descricao}</td>
                   <td className={"px-4 py-2 text-right font-medium " + (cfg.sinal>0?"text-green-600":"text-red-600")}>{cfg.sinal>0?"+":"−"}{fmtBRL(l.valor)}</td>
@@ -3714,8 +3751,9 @@ function CaixaPanel({lancamentos, fechamentos, onNew, onFechar, onReabrir}) {
 }
 
 function LancamentoModal({data, unidades, onClose, onSave}) {
-  const [form, setForm] = useState({ unidadeId: unidades?.[0]?.id||"", ...data });
+  const [form, setForm] = useState({ unidadeId: unidades?.[0]?.id||"", origemPagamento: "particular", ...data });
   const precisaForma = form.tipo === "receita" || form.tipo === "despesa";
+  const ehReceita = form.tipo === "receita";
   return (
     <Modal title="Novo lançamento de caixa" onClose={onClose}>
       <Field label="Data"><input type="date" className={inputCls} value={form.data} onChange={e=>setForm({...form,data:e.target.value})} /></Field>
@@ -3729,6 +3767,13 @@ function LancamentoModal({data, unidades, onClose, onSave}) {
           {Object.entries(TIPO_LANCAMENTO).map(([k,v]) => <option key={k} value={k}>{v.label}</option>)}
         </select>
       </Field>
+      {ehReceita && (
+        <Field label="Origem">
+          <select className={inputCls} value={form.origemPagamento||"particular"} onChange={e=>setForm({...form,origemPagamento:e.target.value})}>
+            {Object.entries(ORIGENS_PAGAMENTO).map(([k,label]) => <option key={k} value={k}>{label}</option>)}
+          </select>
+        </Field>
+      )}
       {precisaForma && (
         <Field label="Forma de pagamento">
           <select className={inputCls} value={form.formaPagamento} onChange={e=>setForm({...form,formaPagamento:e.target.value})}>
@@ -3740,7 +3785,76 @@ function LancamentoModal({data, unidades, onClose, onSave}) {
       <Field label="Descrição"><input className={inputCls} value={form.descricao} onChange={e=>setForm({...form,descricao:e.target.value})} /></Field>
       <div className="flex justify-end gap-2 mt-4">
         <button onClick={onClose} className="px-4 py-2 text-sm rounded-lg border border-slate-300">Cancelar</button>
-        <button onClick={()=>onSave({...form, formaPagamento: precisaForma ? form.formaPagamento : "dinheiro"})} className="px-4 py-2 text-sm rounded-lg bg-teal-600 text-white hover:bg-teal-700">Lançar</button>
+        <button onClick={()=>onSave({...form, formaPagamento: precisaForma ? form.formaPagamento : "dinheiro", origemPagamento: ehReceita ? (form.origemPagamento||"particular") : null})} className="px-4 py-2 text-sm rounded-lg bg-teal-600 text-white hover:bg-teal-700">Lançar</button>
+      </div>
+    </Modal>
+  );
+}
+
+function VenderProdutoModal({data, produtos, clients, onClose, onSave}) {
+  const cliente = clients.find(c=>c.id===data.clienteId);
+  const produtosAtivos = (produtos||[]).filter(p=>p.ativo);
+  const [produtoId, setProdutoId] = useState(produtosAtivos[0]?.id || "");
+  const [quantidade, setQuantidade] = useState(1);
+  const [desconto, setDesconto] = useState(0);
+  const [formaPagamento, setFormaPagamento] = useState("dinheiro");
+  const [origemPagamento, setOrigemPagamento] = useState(cliente?.pagamento?.tipo === "convenio" ? "convenio" : "particular");
+
+  const produto = produtosAtivos.find(p=>p.id===produtoId);
+  const descontoMax = produto?.descontoMaximoPercent || 0;
+  const valorBruto = (produto?.precoBase||0) * quantidade;
+  const valorFinal = valorBruto * (1 - Math.min(desconto, descontoMax)/100);
+
+  function confirmar(){
+    if (!produto) return;
+    onSave({
+      data: data.data || TODAY,
+      unidadeId: data.unidadeId,
+      tipo: "receita",
+      formaPagamento,
+      origemPagamento,
+      valor: Number(valorFinal.toFixed(2)),
+      descricao: `Venda: ${produto.nome}${quantidade>1?` (${quantidade}x)`:""} — ${cliente?.nome || "Cliente"}`,
+    });
+  }
+
+  return (
+    <Modal title="Vender produto" onClose={onClose}>
+      <Field label="Cliente"><div className="text-sm text-slate-700 py-1.5">{cliente?.nome || "—"}</div></Field>
+      {produtosAtivos.length===0 ? (
+        <div className="text-sm text-slate-500 py-2">Nenhum produto ativo cadastrado no Catálogo.</div>
+      ) : (
+        <>
+          <Field label="Produto">
+            <select className={inputCls} value={produtoId} onChange={e=>{setProdutoId(e.target.value); setDesconto(0);}}>
+              {produtosAtivos.map(p => <option key={p.id} value={p.id}>{p.nome} — {fmtBRL(p.precoBase)}</option>)}
+            </select>
+          </Field>
+          <Field label="Quantidade">
+            <input type="number" min="1" className={inputCls} value={quantidade} onChange={e=>setQuantidade(Math.max(1, Number(e.target.value)))} />
+          </Field>
+          {descontoMax > 0 && (
+            <Field label={`Desconto % (máx. ${descontoMax}%)`}>
+              <input type="number" min="0" max={descontoMax} className={inputCls} value={desconto}
+                onChange={e=>setDesconto(Math.min(descontoMax, Math.max(0, Number(e.target.value))))} />
+            </Field>
+          )}
+          <Field label="Origem">
+            <select className={inputCls} value={origemPagamento} onChange={e=>setOrigemPagamento(e.target.value)}>
+              {Object.entries(ORIGENS_PAGAMENTO).map(([k,label]) => <option key={k} value={k}>{label}</option>)}
+            </select>
+          </Field>
+          <Field label="Forma de pagamento">
+            <select className={inputCls} value={formaPagamento} onChange={e=>setFormaPagamento(e.target.value)}>
+              {Object.entries(FORMAS_PAGAMENTO).map(([k,label]) => <option key={k} value={k}>{label}</option>)}
+            </select>
+          </Field>
+          <div className="bg-slate-50 rounded-lg p-3 text-sm text-slate-700 my-2">Total: <strong>{fmtBRL(valorFinal)}</strong></div>
+        </>
+      )}
+      <div className="flex justify-end gap-2 mt-4">
+        <button onClick={onClose} className="px-4 py-2 text-sm rounded-lg border border-slate-300">Cancelar</button>
+        <button onClick={confirmar} disabled={!produto} className="px-4 py-2 text-sm rounded-lg bg-teal-600 text-white hover:bg-teal-700 disabled:opacity-50">Vender e lançar no caixa</button>
       </div>
     </Modal>
   );
