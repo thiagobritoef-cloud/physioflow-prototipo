@@ -32,7 +32,7 @@ const sbClient = window.supabase ? window.supabase.createClient(SUPABASE_URL, SU
 // Isso é um gate de UI: a proteção de verdade (linha a linha, por RLS no Postgres) é um passo seguinte —
 // hoje os dados operacionais (agenda, clientes etc.) ainda vivem no localStorage do navegador.
 const PERMISSOES = {
-  admin:          { label: "Gestor",         tabs: ["agenda","clientes","profissionais","guias","catalogo","caixa","fichas","dashboard","notificacoes"] },
+  admin:          { label: "Gestor",         tabs: ["agenda","clientes","profissionais","guias","catalogo","caixa","fichas","dashboard","usuarios","notificacoes"] },
   recepcao:       { label: "Recepção",       tabs: ["agenda","clientes","guias","caixa","fichas","notificacoes"] },
   fisioterapeuta: { label: "Fisioterapeuta", tabs: ["agenda","clientes","guias","fichas","dashboard","notificacoes"], agendaSomenteProprio: true },
   faturamento:    { label: "Faturamento",    tabs: ["clientes","guias","catalogo","dashboard","notificacoes"] },
@@ -130,14 +130,13 @@ const guiasIniciais = [
 ];
 
 // Máquina de status do agendamento (P0-3):
-// agendado -> confirmado -> chegou -> em_atendimento -> atendido (baixa/estorno de guia acontece só na entrada/saída de "atendido")
+// agendado -> confirmado -> chegou -> atendido (baixa/estorno de guia acontece só na entrada/saída de "atendido")
 // desvios possíveis a qualquer momento: remarcado (cria novo agendamento vinculado), desmarcado, faltou.
 // "Avaliação" deixou de ser status — agora é um `tipo` de agendamento (ver TIPOS_AGENDAMENTO).
 const STATUS_CONFIG = {
   agendado:       { label:"Agendado",        badge:"bg-blue-100 text-blue-700 border-blue-300", dot:"bg-blue-500" },
   confirmado:     { label:"Confirmado",      badge:"bg-cyan-100 text-cyan-700 border-cyan-300", dot:"bg-cyan-500" },
   chegou:         { label:"Chegou",          badge:"bg-indigo-100 text-indigo-700 border-indigo-300", dot:"bg-indigo-500" },
-  em_atendimento: { label:"Em atendimento",  badge:"bg-violet-100 text-violet-700 border-violet-300", dot:"bg-violet-500" },
   atendido:       { label:"Atendido",        badge:"bg-green-100 text-green-700 border-green-300", dot:"bg-green-500" },
   remarcado:      { label:"Remarcado",       badge:"bg-slate-100 text-slate-500 border-slate-300", dot:"bg-slate-400" },
   desmarcado:     { label:"Desmarcado",      badge:"bg-amber-100 text-amber-700 border-amber-300", dot:"bg-amber-500" },
@@ -149,11 +148,10 @@ const TIPOS_AGENDAMENTO = { sessao:"Sessão", avaliacao:"Avaliação", retorno:"
 // Estados que um agendamento pode alcançar a partir do status atual (evita "voltar" para estados que não fazem sentido
 // pelo select rápido do Kanban; "atendido" pode regredir para permitir correção com estorno automático da guia).
 const STATUS_TRANSICOES = {
-  agendado:       ["agendado","confirmado","chegou","em_atendimento","atendido","remarcado","desmarcado","faltou"],
-  confirmado:     ["confirmado","chegou","em_atendimento","atendido","remarcado","desmarcado","faltou"],
-  chegou:         ["chegou","em_atendimento","atendido","faltou"],
-  em_atendimento: ["em_atendimento","atendido"],
-  atendido:       ["atendido","em_atendimento","chegou"],
+  agendado:       ["agendado","confirmado","chegou","atendido","remarcado","desmarcado","faltou"],
+  confirmado:     ["confirmado","chegou","atendido","remarcado","desmarcado","faltou"],
+  chegou:         ["chegou","atendido","faltou"],
+  atendido:       ["atendido","chegou"],
   remarcado:      ["remarcado"],
   desmarcado:     ["desmarcado","agendado"],
   faltou:         ["faltou","agendado"],
@@ -235,13 +233,13 @@ const conveniosIniciais = [
 
 const CATEGORIAS_PRODUTO = ["Avaliação","Pacote de sessões","Sessão avulsa","Produto"];
 const produtosIniciais = [
-  { id:"pr1", nome:"Avaliação inicial", categoria:"Avaliação", descricao:"Avaliação fisioterapêutica completa com anamnese.", precoBase:150, sessoesIncluidas:1, descontoMaximoPercent:0, parcelasMaximas:1, ativo:true },
-  { id:"pr2", nome:"Pacote RPG 10 sessões", categoria:"Pacote de sessões", descricao:"Reeducação postural global - pacote fechado.", precoBase:1200, sessoesIncluidas:10, descontoMaximoPercent:10, parcelasMaximas:3, ativo:true },
-  { id:"pr3", nome:"Pacote Pilates mensal (8 sessões)", categoria:"Pacote de sessões", descricao:"Pilates clínico - plano mensal recorrente.", precoBase:880, sessoesIncluidas:8, descontoMaximoPercent:15, parcelasMaximas:2, ativo:true },
-  { id:"pr4", nome:"Pacote reabilitação 20 sessões", categoria:"Pacote de sessões", descricao:"Reabilitação ortopédica pós-cirúrgica.", precoBase:2800, sessoesIncluidas:20, descontoMaximoPercent:12, parcelasMaximas:4, ativo:true },
-  { id:"pr5", nome:"Sessão avulsa", categoria:"Sessão avulsa", descricao:"Sessão individual sem vínculo a pacote.", precoBase:130, sessoesIncluidas:1, descontoMaximoPercent:5, parcelasMaximas:1, ativo:true },
-  { id:"pr6", nome:"Munhequeira ortopédica", categoria:"Produto", descricao:"Órtese para punho.", precoBase:89, sessoesIncluidas:0, descontoMaximoPercent:20, parcelasMaximas:2, ativo:true },
-  { id:"pr7", nome:"Faixa elástica terapêutica (kit)", categoria:"Produto", descricao:"Kit de faixas para exercícios domiciliares.", precoBase:65, sessoesIncluidas:0, descontoMaximoPercent:15, parcelasMaximas:1, ativo:true },
+  { id:"pr1", nome:"Avaliação inicial", categoria:"Avaliação", descricao:"Avaliação fisioterapêutica completa com anamnese.", especialidade:"", precoBase:150, sessoesIncluidas:1, descontoMaximoPercent:0, parcelasMaximas:1, ativo:true },
+  { id:"pr2", nome:"Pacote RPG 10 sessões", categoria:"Pacote de sessões", descricao:"Reeducação postural global - pacote fechado.", especialidade:"RPG", precoBase:1200, sessoesIncluidas:10, descontoMaximoPercent:10, parcelasMaximas:3, ativo:true },
+  { id:"pr3", nome:"Pacote Pilates mensal (8 sessões)", categoria:"Pacote de sessões", descricao:"Pilates clínico - plano mensal recorrente.", especialidade:"Pilates", precoBase:880, sessoesIncluidas:8, descontoMaximoPercent:15, parcelasMaximas:2, ativo:true },
+  { id:"pr4", nome:"Pacote reabilitação 20 sessões", categoria:"Pacote de sessões", descricao:"Reabilitação ortopédica pós-cirúrgica.", especialidade:"Fisioterapia Ortopédica", precoBase:2800, sessoesIncluidas:20, descontoMaximoPercent:12, parcelasMaximas:4, ativo:true },
+  { id:"pr5", nome:"Sessão avulsa", categoria:"Sessão avulsa", descricao:"Sessão individual sem vínculo a pacote.", especialidade:"", precoBase:130, sessoesIncluidas:1, descontoMaximoPercent:5, parcelasMaximas:1, ativo:true },
+  { id:"pr6", nome:"Munhequeira ortopédica", categoria:"Produto", descricao:"Órtese para punho.", especialidade:"", precoBase:89, sessoesIncluidas:0, descontoMaximoPercent:20, parcelasMaximas:2, ativo:true },
+  { id:"pr7", nome:"Faixa elástica terapêutica (kit)", categoria:"Produto", descricao:"Kit de faixas para exercícios domiciliares.", especialidade:"", precoBase:65, sessoesIncluidas:0, descontoMaximoPercent:15, parcelasMaximas:1, ativo:true },
 ];
 
 const LIMITE_ALERTA_VALIDADE_DIAS = 15;
@@ -508,10 +506,17 @@ function Modal({title, onClose, children, wide}) {
 /* ---------------- App ---------------- */
 function App({currentUser, onLogout}) {
   const perms = useMemo(() => permissoesDoPerfil(currentUser?.role), [currentUser]);
-  const [tab, setTab] = useState(() => perms.tabs[0] || "agenda");
+  // Lembra a última aba usada entre sessões/aberturas do site (RN pedida pelo usuário: não voltar
+  // sempre para a Agenda ao reabrir). Só cai para a primeira aba permitida se a salva não existir mais
+  // ou não for permitida para o perfil logado.
+  const [tab, setTab] = useState(() => {
+    const salva = loadPersisted("ultimaAba", null);
+    return (salva && perms.tabs.includes(salva)) ? salva : (perms.tabs[0] || "agenda");
+  });
   useEffect(() => {
     if (!perms.tabs.includes(tab)) setTab(perms.tabs[0] || "agenda");
   }, [perms, tab]);
+  useEffect(() => { savePersisted("ultimaAba", tab); }, [tab]);
   const [professionals, setProfessionals] = useState(() => loadPersisted("professionals", initialProfessionals));
   const [clients, setClients] = useState(() => loadPersisted("clients", initialClients));
   const [appointments, setAppointments] = useState(() => loadPersisted("appointments", initialAppointments));
@@ -847,6 +852,21 @@ function App({currentUser, onLogout}) {
     setModal(null);
   }
 
+  // Sugestão de produto por especialidade (NOVO): vincula um produto ao cliente sem fechar a
+  // modal de agendamento — usado quando o profissional escolhido tem uma especialidade com produto
+  // cadastrado no Catálogo e o cliente ainda não tem esse produto vinculado (o usuário pode ignorar).
+  function vincularProdutoAoCliente(clienteId, produto){
+    setClients(list => list.map(c => c.id===clienteId ? {
+      ...c,
+      produtoId: produto.id,
+      pacoteNome: produto.nome,
+      sessoesTotal: produto.sessoesIncluidas || c.sessoesTotal,
+      valorSessao: produto.sessoesIncluidas>0 ? Math.round((produto.precoBase/produto.sessoesIncluidas)*100)/100 : produto.precoBase,
+      descontoAplicado: 0, parcelas: 1,
+    } : c));
+    pushLog("Interno", `Produto "${produto.nome}" vinculado ao cliente via sugestão de especialidade na Agenda.`);
+  }
+
   function saveClient(form){
     setClients(list => {
       const exists = list.some(c=>c.id===form.id);
@@ -1000,12 +1020,12 @@ function App({currentUser, onLogout}) {
             setSelectedDate={setSelectedDate}
             onStatusChange={handleStatusChange}
             onMoveProfessional={handleMoveProfessional}
-            onNewAppointment={(profId)=>setModal({type:"appt", data:{profissionalId:profId, data:selectedDate, hora:"09:00", status:"agendado", tipo:"sessao", duracaoMin:50, unidadeId:unidadePadraoParaProfissional(profId), clienteId:clients[0]?.id||"", sessaoAtual:1, pagamentoVinculado:false}})}
+            onNewAppointment={(profId, dataOverride)=>setModal({type:"appt", data:{profissionalId:profId, data:dataOverride||selectedDate, hora:"09:00", status:"agendado", tipo:"sessao", duracaoMin:50, unidadeId:unidadePadraoParaProfissional(profId), clienteId:clients[0]?.id||"", sessaoAtual:1, pagamentoVinculado:false}})}
             onVenderProduto={perms.tabs.includes("caixa") ? (appt)=>setModal({type:"venderProduto", data:{clienteId:appt.clienteId, unidadeId:appt.unidadeId, data:appt.data}}) : null}
           />
         )}
         {tab === "clientes" && (
-          <ClientList clients={clients} professionals={professionals}
+          <ClientList clients={clients} professionals={professionals} appointments={appointments}
             onNew={()=>setModal({type:"client", data:{id:"", nome:"", telefone:"", email:"", endereco:"", dataNascimento:"", cpf:"", numeroCarteirinha:"", convenio:"", pagamento:{tipo:"particular", numeroGuia:""}, medico:"", telefoneEmergencia:"", tratamento:"", pacoteNome:"", sessoesTotal:10, dataInicio:TODAY, profissionaisIds:[], valorSessao:0, alta:null, horariosFixos:[], produtoId:null, descontoAplicado:0, parcelas:1}})}
             onEdit={(c)=>setModal({type:"client", data:c})}
             onViewProfile={(c)=>setModal({type:"clientProfile", data:c})}
@@ -1045,7 +1065,7 @@ function App({currentUser, onLogout}) {
             onNovoConvenio={()=>setModal({type:"convenio", data:{id:"", nome:"", registroANS:"", telefone:"", prazoMedioPagamentoDias:0, ativo:true}})}
             onEditarConvenio={(c)=>setModal({type:"convenio", data:c})}
             onToggleConvenioAtivo={(id)=>setConvenios(list=>list.map(c=>c.id===id?{...c,ativo:!c.ativo}:c))}
-            onNovoProduto={()=>setModal({type:"produto", data:{id:"", nome:"", categoria:CATEGORIAS_PRODUTO[0], descricao:"", precoBase:0, sessoesIncluidas:1, descontoMaximoPercent:0, parcelasMaximas:1, ativo:true}})}
+            onNovoProduto={()=>setModal({type:"produto", data:{id:"", nome:"", categoria:CATEGORIAS_PRODUTO[0], descricao:"", especialidade:"", precoBase:0, sessoesIncluidas:1, descontoMaximoPercent:0, parcelasMaximas:1, ativo:true}})}
             onEditarProduto={(p)=>setModal({type:"produto", data:p})}
             onToggleProdutoAtivo={(id)=>setProdutos(list=>list.map(p=>p.id===id?{...p,ativo:!p.ativo}:p))}
           />
@@ -1069,6 +1089,9 @@ function App({currentUser, onLogout}) {
         {tab === "dashboard" && (
           <Dashboard clients={clients} appointments={appointmentsNaUnidade} guias={guiasNaUnidade} lancamentos={lancamentosNaUnidade} fichas={fichas} produtos={produtos} convenios={convenios} procedimentosTuss={procedimentosTuss} />
         )}
+        {tab === "usuarios" && (
+          <UsuariosPanel currentUser={currentUser} />
+        )}
         {tab === "notificacoes" && (
           <NotificationsPanel log={log} notifyEnabled={notifyEnabled} setNotifyEnabled={setNotifyEnabled} />
         )}
@@ -1076,8 +1099,8 @@ function App({currentUser, onLogout}) {
 
       {modal?.type === "appt" && (
         <AppointmentModal data={modal.data} clients={clients} professionals={professionals} guias={guias}
-          appointments={appointments} unidades={unidades}
-          onClose={()=>setModal(null)} onSave={createAppointment} />
+          appointments={appointments} unidades={unidades} produtos={produtos}
+          onClose={()=>setModal(null)} onSave={createAppointment} onVincularProduto={vincularProdutoAoCliente} />
       )}
       {modal?.type === "client" && (
         <ClientModal data={modal.data} professionals={professionals} convenios={convenios} produtos={produtos} onClose={()=>setModal(null)} onSave={saveClient} />
@@ -1145,6 +1168,7 @@ function TopBar({tab, setTab, notifyEnabled, setNotifyEnabled, onReset, unidades
     {id:"caixa", label:"Fluxo de Caixa"},
     {id:"fichas", label:"Fichas Clínicas"},
     {id:"dashboard", label:"Dashboard"},
+    {id:"usuarios", label:"Usuários"},
     {id:"notificacoes", label:"Notificações"},
   ];
   const tabsPermitidas = perms?.tabs || todasAbas.map(t=>t.id);
@@ -1197,6 +1221,12 @@ function TopBar({tab, setTab, notifyEnabled, setNotifyEnabled, onReset, unidades
 /* ---------------- Agenda Kanban ---------------- */
 function Agenda({professionals, clients, appointments, guias, fichas, selectedDate, setSelectedDate, onStatusChange, onMoveProfessional, onNewAppointment, onVenderProduto}) {
   const dragItem = useRef(null);
+  const [visao, setVisao] = useState("dia"); // "dia" (kanban) | "semana" (agenda individual por profissional)
+  const [profissionalSemanaId, setProfissionalSemanaId] = useState(() => professionals[0]?.id || "");
+  useEffect(() => {
+    if (!professionals.some(p=>p.id===profissionalSemanaId)) setProfissionalSemanaId(professionals[0]?.id || "");
+  }, [professionals, profissionalSemanaId]);
+  const profissionalDaSemana = professionals.find(p=>p.id===profissionalSemanaId);
 
   const apptsByProf = useMemo(() => {
     const map = {};
@@ -1273,13 +1303,32 @@ function Agenda({professionals, clients, appointments, guias, fichas, selectedDa
           </div>
         </div>
       </div>
+      <div className="flex items-center gap-2 mb-3">
+        <div className="flex gap-1 bg-slate-200/60 rounded-lg p-1">
+          <button onClick={()=>setVisao("dia")} className={"px-3 py-1.5 rounded-md text-xs font-medium " + (visao==="dia"?"bg-white shadow text-teal-700":"text-slate-500")}>Kanban do dia</button>
+          <button onClick={()=>setVisao("semana")} className={"px-3 py-1.5 rounded-md text-xs font-medium " + (visao==="semana"?"bg-white shadow text-teal-700":"text-slate-500")}>Agenda individual (semana)</button>
+        </div>
+        {visao==="semana" && (
+          <select value={profissionalSemanaId} onChange={e=>setProfissionalSemanaId(e.target.value)}
+            className="border border-slate-300 rounded-lg px-2 py-1.5 text-xs bg-white font-medium text-slate-700">
+            {professionals.map(p => <option key={p.id} value={p.id}>{p.nome}</option>)}
+          </select>
+        )}
+      </div>
+
       <div className="flex items-center gap-3 mb-4 flex-wrap">
-        <button onClick={()=>shiftDate(-1)} className="px-2 py-1.5 rounded-lg border border-slate-300 bg-white hover:bg-slate-50 text-sm">←</button>
+        <button onClick={()=>shiftDate(visao==="semana"?-7:-1)} className="px-2 py-1.5 rounded-lg border border-slate-300 bg-white hover:bg-slate-50 text-sm">←</button>
         <input type="date" value={selectedDate} onChange={e=>setSelectedDate(e.target.value)} className="border border-slate-300 rounded-lg px-3 py-1.5 text-sm bg-white" />
-        <button onClick={()=>shiftDate(1)} className="px-2 py-1.5 rounded-lg border border-slate-300 bg-white hover:bg-slate-50 text-sm">→</button>
-        <span className="text-sm text-slate-500">{fmtDataBR(selectedDate)}</span>
-        <button onClick={()=>onNewAppointment((profissionaisDoDia[0]||professionals[0])?.id)} className="px-3 py-2 text-sm font-medium rounded-lg bg-teal-600 text-white hover:bg-teal-700">+ Novo agendamento</button>
-        <span className="text-xs text-slate-400">{profissionaisDoDia.length} de {professionals.length} profissionais atendem {fmtDataBR(selectedDate)} ({diaSemana})</span>
+        <button onClick={()=>shiftDate(visao==="semana"?7:1)} className="px-2 py-1.5 rounded-lg border border-slate-300 bg-white hover:bg-slate-50 text-sm">→</button>
+        {visao==="dia" ? (
+          <>
+            <span className="text-sm text-slate-500">{fmtDataBR(selectedDate)}</span>
+            <button onClick={()=>onNewAppointment((profissionaisDoDia[0]||professionals[0])?.id)} className="px-3 py-2 text-sm font-medium rounded-lg bg-teal-600 text-white hover:bg-teal-700">+ Novo agendamento</button>
+            <span className="text-xs text-slate-400">{profissionaisDoDia.length} de {professionals.length} profissionais atendem {fmtDataBR(selectedDate)} ({diaSemana})</span>
+          </>
+        ) : (
+          <span className="text-sm text-slate-500">Semana de {fmtDataBR(getInicioSemana(selectedDate))} a {fmtDataBR(getFimSemana(selectedDate))}</span>
+        )}
         <div className="ml-auto flex items-center gap-3 text-xs text-slate-500 flex-wrap">
           {Object.entries(STATUS_CONFIG).map(([k,v]) => (
             <span key={k} className="flex items-center gap-1"><span className={"w-2 h-2 rounded-full "+v.dot}></span>{v.label}</span>
@@ -1287,6 +1336,17 @@ function Agenda({professionals, clients, appointments, guias, fichas, selectedDa
         </div>
       </div>
 
+      {visao === "semana" && (
+        profissionalDaSemana ? (
+          <AgendaSemanalProfissional professional={profissionalDaSemana} appointments={appointments} clients={clients}
+            weekStart={getInicioSemana(selectedDate)} onStatusChange={onStatusChange} onNewAppointment={onNewAppointment} />
+        ) : (
+          <div className="text-center text-sm text-slate-400 bg-white rounded-xl border border-slate-200 p-8">Nenhum profissional cadastrado.</div>
+        )
+      )}
+
+      {visao === "dia" && (
+      <>
       {profissionaisDoDia.length === 0 && (
         <div className="text-center text-sm text-slate-400 bg-white rounded-xl border border-slate-200 p-8">Nenhum profissional atende neste dia da semana ({diaSemana}).</div>
       )}
@@ -1358,12 +1418,56 @@ function Agenda({professionals, clients, appointments, guias, fichas, selectedDa
         ))}
       </div>
       <p className="text-xs text-slate-400 mt-2">Dica: arraste um cartão para outra coluna para trocar o profissional responsável pela sessão.</p>
+      </>
+      )}
+    </div>
+  );
+}
+
+/* ---------------- Agenda individual semanal por profissional ---------------- */
+function AgendaSemanalProfissional({professional, appointments, clients, weekStart, onStatusChange, onNewAppointment}) {
+  const dias = Array.from({length:7}, (_,i) => addDays(weekStart, i));
+  return (
+    <div className="bg-white rounded-xl border border-slate-200 p-3 mb-4">
+      <div className="text-sm font-semibold text-slate-800 mb-0.5">{professional.nome}</div>
+      <div className="text-xs text-slate-500 mb-3">{professional.cargo} · {(professional.dias||[]).join(", ")} · {professional.horaInicio}–{professional.horaFim}</div>
+      <div className="grid grid-cols-1 md:grid-cols-7 gap-2">
+        {dias.map(dia => {
+          const diaSemana = getWeekdayLabel(dia);
+          const atende = (professional.dias||[]).includes(diaSemana);
+          const apptsDoDia = appointments.filter(a=>a.profissionalId===professional.id && a.data===dia).sort((a,b)=>a.hora.localeCompare(b.hora));
+          return (
+            <div key={dia} className={"rounded-lg border p-2 flex flex-col min-h-[180px] " + (atende ? "bg-slate-50 border-slate-200" : "bg-slate-100/60 border-slate-100")}>
+              <div className="text-xs font-semibold text-slate-700">{diaSemana}</div>
+              <div className="text-[10px] text-slate-400 mb-2">{fmtDataBR(dia)}</div>
+              {!atende && apptsDoDia.length===0 && <div className="text-[10px] text-slate-400 text-center mt-6">Não atende</div>}
+              <div className="flex-1 flex flex-col gap-1.5">
+                {apptsDoDia.map(appt => {
+                  const cliente = clients.find(c=>c.id===appt.clienteId);
+                  const cfg = STATUS_CONFIG[appt.status];
+                  const opcoesStatus = STATUS_TRANSICOES[appt.status] || Object.keys(STATUS_CONFIG);
+                  return (
+                    <div key={appt.id} className="bg-white rounded-md border border-slate-200 p-1.5">
+                      <div className="text-[11px] font-medium text-slate-700 truncate">{appt.hora} · {cliente?.nome || "Cliente removido"}</div>
+                      <select value={appt.status} onChange={e=>onStatusChange(appt, e.target.value)}
+                        className={"mt-1 w-full text-[10px] font-medium border rounded px-1 py-0.5 " + cfg.badge}>
+                        {opcoesStatus.map(k => <option key={k} value={k}>{STATUS_CONFIG[k].label}</option>)}
+                      </select>
+                    </div>
+                  );
+                })}
+              </div>
+              <button onClick={()=>onNewAppointment(professional.id, dia)} className="mt-2 w-full text-[10px] font-medium text-teal-700 bg-teal-50 hover:bg-teal-100 rounded py-1">+ agendar</button>
+            </div>
+          );
+        })}
+      </div>
     </div>
   );
 }
 
 /* ---------------- Appointment Modal ---------------- */
-function AppointmentModal({data, clients, professionals, guias, appointments, unidades, onClose, onSave}) {
+function AppointmentModal({data, clients, professionals, guias, appointments, unidades, produtos, onClose, onSave, onVincularProduto}) {
   const [form, setForm] = useState({ tipo:"sessao", duracaoMin:50, unidadeId:unidades?.[0]?.id||"", permitirForaExpediente:false, confirmarExcecaoGuia:false, ...data });
   const clienteSelecionado = clients.find(c=>c.id===form.clienteId);
   const guiasDoCliente = guias.filter(g => g.clienteId===form.clienteId && g.status==="aberta" && g.quantidadeUtilizada < g.quantidadeAutorizada);
@@ -1371,6 +1475,17 @@ function AppointmentModal({data, clients, professionals, guias, appointments, un
   const tipoPagamento = clienteSelecionado?.pagamento.tipo;
   const profissionalSelecionado = professionals.find(p=>p.id===form.profissionalId);
   const unidadesDoProfissional = (unidades||[]).filter(u => (profissionalSelecionado?.unidadeIds||[]).includes(u.id));
+
+  // NOVO: sugestão automática de produto por especialidade do profissional — só sugere se o cliente
+  // ainda não tem esse mesmo produto vinculado; nunca aplica sozinho, sempre exige clique manual.
+  const [produtoSugeridoDispensado, setProdutoSugeridoDispensado] = useState(false);
+  const produtoSugerido = useMemo(() => {
+    if (!profissionalSelecionado?.cargo || !clienteSelecionado) return null;
+    const cargo = profissionalSelecionado.cargo.toLowerCase();
+    const match = (produtos||[]).find(p => p.ativo && p.especialidade && cargo.includes(p.especialidade.toLowerCase()));
+    if (!match || clienteSelecionado.produtoId === match.id) return null;
+    return match;
+  }, [profissionalSelecionado, clienteSelecionado, produtos]);
 
   let pagamentoValido = true;
   let motivoInvalido = "";
@@ -1422,6 +1537,16 @@ function AppointmentModal({data, clients, professionals, guias, appointments, un
           {professionals.map(p => <option key={p.id} value={p.id}>{p.nome}</option>)}
         </select>
       </Field>
+      {produtoSugerido && !produtoSugeridoDispensado && (
+        <div className="bg-teal-50 border border-teal-200 text-teal-800 text-xs rounded-lg p-2 mb-3 flex items-center justify-between gap-2 flex-wrap">
+          <span>💡 Sugestão de produto para <strong>{profissionalSelecionado.cargo}</strong>: <strong>{produtoSugerido.nome}</strong> ({fmtBRL(produtoSugerido.precoBase)})</span>
+          <div className="flex gap-2">
+            <button type="button" onClick={()=>{ onVincularProduto(clienteSelecionado.id, produtoSugerido); setProdutoSugeridoDispensado(true); }}
+              className="px-2 py-1 rounded-md bg-teal-600 text-white font-medium hover:bg-teal-700">Vincular ao cliente</button>
+            <button type="button" onClick={()=>setProdutoSugeridoDispensado(true)} className="px-2 py-1 rounded-md border border-teal-300 hover:bg-teal-100">Ignorar</button>
+          </div>
+        </div>
+      )}
       <div className="grid grid-cols-2 gap-3">
         <Field label="Tipo de agendamento">
           <select className={inputCls} value={form.tipo||"sessao"} onChange={e=>setForm({...form, tipo:e.target.value})}>
@@ -1528,9 +1653,73 @@ function AppointmentModal({data, clients, professionals, guias, appointments, un
 }
 
 /* ---------------- Clients ---------------- */
-function ClientList({clients, professionals, onNew, onEdit, onViewProfile, onImportarLote}) {
+// KPIs de clientes por período: ativos ao fim do período (começou até lá e não teve alta até lá),
+// convênio vs particular entre os ativos, novos (dataInicio no período) e churn (alta no período).
+function calcKpisClientes(clients, periodoInicio, periodoFim){
+  const ativos = clients.filter(c => {
+    const inicio = c.dataInicio || TODAY;
+    if (inicio > periodoFim) return false;
+    return !(c.alta && c.alta.data && c.alta.data <= periodoFim);
+  });
+  const pacientesConvenio = ativos.filter(c=>c.pagamento?.tipo==="convenio").length;
+  const pacientesParticulares = ativos.filter(c=>c.pagamento?.tipo!=="convenio").length;
+  const novosPacientes = clients.filter(c => c.dataInicio && c.dataInicio>=periodoInicio && c.dataInicio<=periodoFim).length;
+  const churnClientes = clients.filter(c => c.alta && c.alta.data && c.alta.data>=periodoInicio && c.alta.data<=periodoFim).length;
+  const baseInicioPeriodo = clients.filter(c => (c.dataInicio||TODAY) < periodoInicio && !(c.alta && c.alta.data && c.alta.data < periodoInicio)).length;
+  const churnPercent = baseInicioPeriodo>0 ? (churnClientes/baseInicioPeriodo*100) : 0;
+  return { pacientesAtivos: ativos.length, pacientesConvenio, pacientesParticulares, novosPacientes, churnClientes, churnPercent };
+}
+
+function ClientesKpiHeader({clients}) {
+  const [modo, setModo] = useState("mes"); // mes | ano
+  const [mesRef, setMesRef] = useState(TODAY.slice(0,7));
+  const [anoRef, setAnoRef] = useState(TODAY.slice(0,4));
+
+  const { periodoInicio, periodoFim } = useMemo(() => {
+    if (modo === "ano") {
+      return { periodoInicio: `${anoRef}-01-01`, periodoFim: `${anoRef}-12-31` };
+    }
+    const [ano, mes] = mesRef.split("-");
+    const ultimoDia = new Date(Number(ano), Number(mes), 0).getDate();
+    return { periodoInicio: `${mesRef}-01`, periodoFim: `${mesRef}-${String(ultimoDia).padStart(2,"0")}` };
+  }, [modo, mesRef, anoRef]);
+
+  const kpis = useMemo(() => calcKpisClientes(clients, periodoInicio, periodoFim), [clients, periodoInicio, periodoFim]);
+
+  return (
+    <div className="mb-4">
+      <div className="flex items-center gap-2 mb-2 flex-wrap">
+        <div className="flex gap-1 bg-slate-200/60 rounded-lg p-1">
+          <button onClick={()=>setModo("mes")} className={"px-3 py-1 rounded-md text-xs font-medium " + (modo==="mes"?"bg-white shadow text-teal-700":"text-slate-500")}>Por mês</button>
+          <button onClick={()=>setModo("ano")} className={"px-3 py-1 rounded-md text-xs font-medium " + (modo==="ano"?"bg-white shadow text-teal-700":"text-slate-500")}>Por ano</button>
+        </div>
+        {modo==="mes" ? (
+          <input type="month" value={mesRef} onChange={e=>setMesRef(e.target.value)} className="border border-slate-300 rounded-lg px-2 py-1.5 text-xs bg-white" />
+        ) : (
+          <input type="number" value={anoRef} onChange={e=>setAnoRef(e.target.value)} className="border border-slate-300 rounded-lg px-2 py-1.5 text-xs bg-white w-24" />
+        )}
+      </div>
+      <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+        <KpiCard label="Pacientes ativos" value={kpis.pacientesAtivos} tone="teal" />
+        <KpiCard label="Pacientes de convênio" value={kpis.pacientesConvenio} />
+        <KpiCard label="Pacientes particulares" value={kpis.pacientesParticulares} />
+        <KpiCard label="Novos pacientes" value={kpis.novosPacientes} tone="green" />
+        <KpiCard label="Churn" value={kpis.churnClientes} tone={kpis.churnClientes>0?"red":"default"} sub={`${kpis.churnPercent.toFixed(1)}% da base do período`} />
+      </div>
+    </div>
+  );
+}
+
+function ClientList({clients, professionals, appointments, onNew, onEdit, onViewProfile, onImportarLote}) {
+  const perfis = useMemo(() => {
+    const map = {};
+    clients.forEach(c => { map[c.id] = calcPerfilCliente(c, appointments||[], professionals); });
+    return map;
+  }, [clients, appointments, professionals]);
+
   return (
     <div>
+      <ClientesKpiHeader clients={clients} />
       <div className="flex items-center justify-between mb-3">
         <h2 className="text-lg font-semibold text-slate-800">Clientes ({clients.length})</h2>
         <div className="flex gap-2">
@@ -1545,26 +1734,42 @@ function ClientList({clients, professionals, onNew, onEdit, onViewProfile, onImp
               <th className="text-left px-4 py-2">Nome</th>
               <th className="text-left px-4 py-2">Telefone</th>
               <th className="text-left px-4 py-2">Convênio / Pagamento</th>
-              <th className="text-left px-4 py-2">Tratamento</th>
+              <th className="text-left px-4 py-2">Tratamentos</th>
               <th className="text-left px-4 py-2">Pacote</th>
               <th className="text-left px-4 py-2">Profissionais</th>
+              <th className="text-right px-4 py-2">LTV</th>
               <th></th>
             </tr>
           </thead>
           <tbody>
-            {clients.map(c => (
+            {clients.map(c => {
+              const perfil = perfis[c.id] || { ltv:0, especialidades:[] };
+              return (
               <tr key={c.id} className="border-t border-slate-100 hover:bg-slate-50">
                 <td className="px-4 py-2 font-medium text-slate-800">
                   <button onClick={()=>onViewProfile(c)} className="text-teal-700 hover:underline text-left">{c.nome}</button>
                 </td>
                 <td className="px-4 py-2 text-slate-500">{c.telefone}</td>
                 <td className="px-4 py-2 text-slate-500">{c.pagamento.tipo==="convenio" ? `${c.convenio} (${c.pagamento.numeroGuia})` : c.pagamento.tipo==="bolsa" ? "Bolsa" : "Particular"}</td>
-                <td className="px-4 py-2 text-slate-500">{c.tratamento}</td>
+                <td className="px-4 py-2 text-slate-500">
+                  {perfil.especialidades.length > 0 ? (
+                    <div className="flex flex-wrap gap-1">
+                      {perfil.especialidades.map(e => (
+                        <span key={e} className="text-[10px] font-medium px-1.5 py-0.5 rounded-full bg-teal-50 text-teal-700 border border-teal-200">{e}</span>
+                      ))}
+                      {perfil.especialidades.length > 1 && (
+                        <span className="text-[10px] font-medium px-1.5 py-0.5 rounded-full bg-purple-50 text-purple-700 border border-purple-200" title="Faz mais de um tratamento">multi</span>
+                      )}
+                    </div>
+                  ) : (c.tratamento || "—")}
+                </td>
                 <td className="px-4 py-2 text-slate-500">{c.pacoteNome}</td>
                 <td className="px-4 py-2 text-slate-500">{c.profissionaisIds.map(id=>professionals.find(p=>p.id===id)?.nome).filter(Boolean).join(", ")}</td>
+                <td className="px-4 py-2 text-right font-medium text-slate-700">{fmtBRL(perfil.ltv)}</td>
                 <td className="px-4 py-2 text-right"><button onClick={()=>onEdit(c)} className="text-teal-600 text-xs font-medium hover:underline">Editar</button></td>
               </tr>
-            ))}
+              );
+            })}
           </tbody>
         </table>
       </div>
@@ -2657,6 +2862,10 @@ function ProdutoModal({data, onClose, onSave}) {
         </select>
       </Field>
       <Field label="Descrição"><textarea className={inputCls} rows={2} value={form.descricao} onChange={e=>setForm({...form,descricao:e.target.value})} /></Field>
+      <Field label="Especialidade relacionada (opcional)">
+        <input className={inputCls} value={form.especialidade||""} onChange={e=>setForm({...form,especialidade:e.target.value})}
+          placeholder="Ex.: Pilates, RPG, Fisioterapia Geral — usado para sugerir este produto na agenda" />
+      </Field>
       <div className="grid grid-cols-2 gap-3">
         <Field label="Preço base (R$)"><input type="number" min="0" step="0.01" className={inputCls} value={form.precoBase} onChange={e=>setForm({...form,precoBase:Number(e.target.value)})} /></Field>
         <Field label="Sessões incluídas"><input type="number" min="0" className={inputCls} value={form.sessoesIncluidas} onChange={e=>setForm({...form,sessoesIncluidas:Number(e.target.value)})} /></Field>
@@ -4255,7 +4464,7 @@ function Dashboard({clients, appointments, guias, lancamentos, fichas, produtos,
         labels: ["Atendido","Agendado/Confirmado","Desmarcado","Faltou"],
         datasets: [{ data: [
           appointments.filter(a=>a.status==="atendido").length,
-          appointments.filter(a=>a.status==="agendado"||a.status==="confirmado"||a.status==="chegou"||a.status==="em_atendimento").length,
+          appointments.filter(a=>a.status==="agendado"||a.status==="confirmado"||a.status==="chegou").length,
           appointments.filter(a=>a.status==="desmarcado").length,
           appointments.filter(a=>a.status==="faltou").length,
         ], backgroundColor:["#16a34a","#2563eb","#d97706","#dc2626"] }]
@@ -4442,6 +4651,81 @@ function NotificationsPanel({log, notifyEnabled, setNotifyEnabled}) {
           </div>
         ))}
       </div>
+    </div>
+  );
+}
+
+/* ---------------- Usuários e Permissões (lê/edita staff_profiles no Supabase) ---------------- */
+function UsuariosPanel({currentUser}) {
+  const [usuarios, setUsuarios] = useState(undefined); // undefined = carregando
+  const [erro, setErro] = useState("");
+  const [salvandoId, setSalvandoId] = useState(null);
+
+  function recarregar(){
+    setUsuarios(undefined);
+    setErro("");
+    if (!sbClient) { setErro("Cliente Supabase não carregou. Verifique sua conexão e recarregue a página."); setUsuarios([]); return; }
+    sbClient.from("staff_profiles").select("*").order("nome").then(({data, error}) => {
+      if (error) { setErro(error.message); setUsuarios([]); return; }
+      setUsuarios(data || []);
+    });
+  }
+
+  useEffect(() => { recarregar(); }, []);
+
+  async function alterarRole(usuario, novoRole){
+    setSalvandoId(usuario.id);
+    const { error } = await sbClient.from("staff_profiles").update({ role: novoRole }).eq("id", usuario.id);
+    setSalvandoId(null);
+    if (error) { window.alert("Não foi possível salvar: " + error.message); return; }
+    setUsuarios(list => list.map(u => u.id===usuario.id ? {...u, role:novoRole} : u));
+  }
+
+  return (
+    <div>
+      <div className="flex items-center justify-between mb-3">
+        <h2 className="text-lg font-semibold text-slate-800">Usuários e permissões</h2>
+        <button onClick={recarregar} className="px-3 py-2 text-sm rounded-lg border border-slate-300 hover:bg-slate-50">Recarregar</button>
+      </div>
+      <div className="bg-amber-50 border border-amber-200 text-amber-800 text-xs rounded-lg p-3 mb-4">
+        Aqui você troca o cargo/perfil de quem já tem login. Para criar um login novo (primeiro acesso de alguém), essa ação exige uma chave que não pode ficar no navegador por segurança — peça para quem administra o Supabase do projeto enviar o convite.
+      </div>
+      {erro && <div className="bg-red-50 border border-red-200 text-red-700 text-xs rounded-lg p-3 mb-4">{erro}</div>}
+      {usuarios === undefined ? (
+        <div className="text-sm text-slate-400 py-8 text-center">Carregando...</div>
+      ) : (
+        <div className="bg-white rounded-xl border border-slate-200 overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead className="bg-slate-50 text-slate-500 text-xs uppercase">
+              <tr>
+                <th className="text-left px-4 py-2">Nome</th>
+                <th className="text-left px-4 py-2">Cargo/Perfil</th>
+                <th className="text-left px-4 py-2">Criado em</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody>
+              {usuarios.length===0 && <tr><td colSpan="4" className="text-center py-4 text-slate-400">Nenhum usuário encontrado.</td></tr>}
+              {usuarios.map(u => (
+                <tr key={u.id} className="border-t border-slate-100">
+                  <td className="px-4 py-2 font-medium text-slate-800">
+                    {u.nome}
+                    {u.id===currentUser?.id && <span className="ml-2 text-[10px] text-teal-600 font-normal">(você)</span>}
+                  </td>
+                  <td className="px-4 py-2">
+                    <select value={u.role} disabled={salvandoId===u.id} onChange={e=>alterarRole(u, e.target.value)}
+                      className="border border-slate-300 rounded-lg px-2 py-1.5 text-xs bg-white">
+                      {Object.entries(PERMISSOES).map(([k,v]) => <option key={k} value={k}>{v.label}</option>)}
+                    </select>
+                  </td>
+                  <td className="px-4 py-2 text-slate-500 text-xs">{u.created_at ? fmtDataBR(String(u.created_at).slice(0,10)) : "—"}</td>
+                  <td className="px-4 py-2 text-right text-xs text-slate-400">{salvandoId===u.id ? "Salvando..." : ""}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
     </div>
   );
 }
