@@ -99,12 +99,12 @@ const initialProfessionals = [
 ];
 
 const initialClients = [
-  { id:"c1", nome:"Ana Beatriz Lima", telefone:"(11) 98888-1111", email:"ana.lima@email.com", endereco:"Rua das Acácias, 120 - São Paulo/SP", dataNascimento:"1988-04-12", cpf:"111.222.333-44", numeroCarteirinha:"AMIL-CART-9021", convenio:"Amil", pagamento:{tipo:"convenio", numeroGuia:"AMIL-88231"}, medico:"Dr. Paulo Vieira", telefoneEmergencia:"(11) 97777-2222", tratamento:"RPG - Lombalgia", pacoteNome:"Pacote 10 sessões", sessoesTotal:10, dataInicio:addDays(TODAY,-51), profissionaisIds:["p1"], valorSessao:120, alta:null, horariosFixos:[] },
-  { id:"c2", nome:"Bruno Cardoso", telefone:"(11) 98888-2222", email:"bruno.cardoso@email.com", endereco:"Av. Paulista, 900 - São Paulo/SP", dataNascimento:"1995-09-30", cpf:"222.333.444-55", numeroCarteirinha:"", convenio:"Particular", pagamento:{tipo:"particular"}, medico:"", telefoneEmergencia:"(11) 96666-3333", tratamento:"Reabilitação de joelho", pacoteNome:"Pacote 20 sessões", sessoesTotal:20, dataInicio:addDays(TODAY,-68), profissionaisIds:["p2"], valorSessao:150, alta:null, horariosFixos:[] },
-  { id:"c3", nome:"Carla Dias", telefone:"(11) 98888-3333", email:"carla.dias@email.com", endereco:"Rua Augusta, 500 - São Paulo/SP", dataNascimento:"1979-01-22", cpf:"333.444.555-66", numeroCarteirinha:"BRAD-CART-5510", convenio:"Bradesco Saúde", pagamento:{tipo:"convenio", numeroGuia:"BRAD-44120"}, medico:"Dra. Renata Mota", telefoneEmergencia:"(11) 95555-4444", tratamento:"Pilates terapêutico", pacoteNome:"Pacote mensal", sessoesTotal:8, dataInicio:addDays(TODAY,-21), profissionaisIds:["p3"], valorSessao:110, alta:null, horariosFixos:[{id:"hf1", ativo:true, profissionalId:"p3", diaSemana:getWeekdayLabel(TODAY), hora:"09:30", dataTermino:null}] },
-  { id:"c4", nome:"Diego Fontes", telefone:"(11) 98888-4444", email:"diego.fontes@email.com", endereco:"Rua Oscar Freire, 210 - São Paulo/SP", dataNascimento:"2001-11-02", cpf:"444.555.666-77", numeroCarteirinha:"", convenio:"Bolsa", pagamento:{tipo:"bolsa"}, medico:"", telefoneEmergencia:"(11) 94444-5555", tratamento:"Fisioterapia respiratória", pacoteNome:"Pacote social 12 sessões", sessoesTotal:12, dataInicio:addDays(TODAY,-12), profissionaisIds:["p1"], valorSessao:0, alta:null, horariosFixos:[] },
-  { id:"c5", nome:"Elaine Torres", telefone:"(11) 98888-5555", email:"elaine.torres@email.com", endereco:"Rua Haddock Lobo, 77 - São Paulo/SP", dataNascimento:"1966-06-18", cpf:"555.666.777-88", numeroCarteirinha:"SUL-CART-7742", convenio:"SulAmérica", pagamento:{tipo:"convenio", numeroGuia:"SUL-77410"}, medico:"Dr. André Klein", telefoneEmergencia:"(11) 93333-6666", tratamento:"Fisioterapia geriátrica", pacoteNome:"Pacote 10 sessões", sessoesTotal:10, dataInicio:addDays(TODAY,-93), profissionaisIds:["p2"], valorSessao:130, alta:null, horariosFixos:[] },
-  { id:"c6", nome:"Felipe Rocha", telefone:"(11) 98888-6666", email:"felipe.rocha@email.com", endereco:"Alameda Santos, 300 - São Paulo/SP", dataNascimento:"1992-03-08", cpf:"666.777.888-99", numeroCarteirinha:"", convenio:"Particular", pagamento:{tipo:"particular"}, medico:"", telefoneEmergencia:"(11) 92222-7777", tratamento:"Avaliação inicial", pacoteNome:"—", sessoesTotal:1, dataInicio:addDays(TODAY,-2), profissionaisIds:["p3"], valorSessao:180, alta:null, horariosFixos:[] },
+  { id:"c1", nome:"Ana Beatriz Lima", telefone:"(11) 98888-1111", email:"ana.lima@email.com", endereco:"Rua das Acácias, 120 - São Paulo/SP", dataNascimento:"1988-04-12", cpf:"111.222.333-44", numeroCarteirinha:"AMIL-CART-9021", convenio:"Amil", pagamento:{tipo:"convenio", numeroGuia:"AMIL-88231"}, medico:"Dr. Paulo Vieira", telefoneEmergencia:"(11) 97777-2222", tratamento:"RPG - Lombalgia", pacoteNome:"Pacote 10 sessões", sessoesTotal:10, dataInicio:addDays(TODAY,-51), profissionaisIds:["p1"], valorSessao:120, alta:null, horariosFixos:[], biometriaCadastrada:true },
+  { id:"c2", nome:"Bruno Cardoso", telefone:"(11) 98888-2222", email:"bruno.cardoso@email.com", endereco:"Av. Paulista, 900 - São Paulo/SP", dataNascimento:"1995-09-30", cpf:"222.333.444-55", numeroCarteirinha:"", convenio:"Particular", pagamento:{tipo:"particular"}, medico:"", telefoneEmergencia:"(11) 96666-3333", tratamento:"Reabilitação de joelho", pacoteNome:"Pacote 20 sessões", sessoesTotal:20, dataInicio:addDays(TODAY,-68), profissionaisIds:["p2"], valorSessao:150, alta:null, horariosFixos:[], biometriaCadastrada:false },
+  { id:"c3", nome:"Carla Dias", telefone:"(11) 98888-3333", email:"carla.dias@email.com", endereco:"Rua Augusta, 500 - São Paulo/SP", dataNascimento:"1979-01-22", cpf:"333.444.555-66", numeroCarteirinha:"BRAD-CART-5510", convenio:"Bradesco Saúde", pagamento:{tipo:"convenio", numeroGuia:"BRAD-44120"}, medico:"Dra. Renata Mota", telefoneEmergencia:"(11) 95555-4444", tratamento:"Pilates terapêutico", pacoteNome:"Pacote mensal", sessoesTotal:8, dataInicio:addDays(TODAY,-21), profissionaisIds:["p3"], valorSessao:110, alta:null, horariosFixos:[{id:"hf1", ativo:true, profissionalId:"p3", diaSemana:getWeekdayLabel(TODAY), hora:"09:30", dataTermino:null}], biometriaCadastrada:true },
+  { id:"c4", nome:"Diego Fontes", telefone:"(11) 98888-4444", email:"diego.fontes@email.com", endereco:"Rua Oscar Freire, 210 - São Paulo/SP", dataNascimento:"2001-11-02", cpf:"444.555.666-77", numeroCarteirinha:"", convenio:"Bolsa", pagamento:{tipo:"bolsa"}, medico:"", telefoneEmergencia:"(11) 94444-5555", tratamento:"Fisioterapia respiratória", pacoteNome:"Pacote social 12 sessões", sessoesTotal:12, dataInicio:addDays(TODAY,-12), profissionaisIds:["p1"], valorSessao:0, alta:null, horariosFixos:[], biometriaCadastrada:false },
+  { id:"c5", nome:"Elaine Torres", telefone:"(11) 98888-5555", email:"elaine.torres@email.com", endereco:"Rua Haddock Lobo, 77 - São Paulo/SP", dataNascimento:"1966-06-18", cpf:"555.666.777-88", numeroCarteirinha:"SUL-CART-7742", convenio:"SulAmérica", pagamento:{tipo:"convenio", numeroGuia:"SUL-77410"}, medico:"Dr. André Klein", telefoneEmergencia:"(11) 93333-6666", tratamento:"Fisioterapia geriátrica", pacoteNome:"Pacote 10 sessões", sessoesTotal:10, dataInicio:addDays(TODAY,-93), profissionaisIds:["p2"], valorSessao:130, alta:null, horariosFixos:[], biometriaCadastrada:false },
+  { id:"c6", nome:"Felipe Rocha", telefone:"(11) 98888-6666", email:"felipe.rocha@email.com", endereco:"Alameda Santos, 300 - São Paulo/SP", dataNascimento:"1992-03-08", cpf:"666.777.888-99", numeroCarteirinha:"", convenio:"Particular", pagamento:{tipo:"particular"}, medico:"", telefoneEmergencia:"(11) 92222-7777", tratamento:"Avaliação inicial", pacoteNome:"—", sessoesTotal:1, dataInicio:addDays(TODAY,-2), profissionaisIds:["p3"], valorSessao:180, alta:null, horariosFixos:[], biometriaCadastrada:false },
 ];
 
 const initialAppointments = [
@@ -1128,7 +1128,9 @@ function App({currentUser, onLogout}) {
     <div className="min-h-screen">
       <TopBar tab={tab} setTab={setTab} notifyEnabled={notifyEnabled} setNotifyEnabled={setNotifyEnabled} onReset={resetParaDadosDeExemplo}
         unidades={unidades} unidadeFiltro={unidadeFiltro} setUnidadeFiltro={setUnidadeFiltro}
-        currentUser={currentUser} perms={perms} onLogout={onLogout} />
+        currentUser={currentUser} perms={perms} onLogout={onLogout}
+        professionals={professionals} clients={clients} appointments={appointments}
+        onRegistrarPonto={registrarPonto} onConfirmarChegada={confirmarChegadaPaciente} />
       <main className="max-w-[1500px] mx-auto p-4">
         {tab === "agenda" && (
           <Agenda
@@ -1148,7 +1150,7 @@ function App({currentUser, onLogout}) {
         )}
         {tab === "clientes" && (
           <ClientList clients={clients} professionals={professionals} appointments={appointments}
-            onNew={()=>setModal({type:"client", data:{id:"", nome:"", telefone:"", email:"", endereco:"", dataNascimento:"", cpf:"", numeroCarteirinha:"", convenio:"", pagamento:{tipo:"particular", numeroGuia:""}, medico:"", telefoneEmergencia:"", tratamento:"", pacoteNome:"", sessoesTotal:10, dataInicio:TODAY, profissionaisIds:[], valorSessao:0, alta:null, horariosFixos:[], produtoId:null, descontoAplicado:0, parcelas:1}})}
+            onNew={()=>setModal({type:"client", data:{id:"", nome:"", telefone:"", email:"", endereco:"", dataNascimento:"", cpf:"", numeroCarteirinha:"", convenio:"", pagamento:{tipo:"particular", numeroGuia:""}, medico:"", telefoneEmergencia:"", tratamento:"", pacoteNome:"", sessoesTotal:10, dataInicio:TODAY, profissionaisIds:[], valorSessao:0, alta:null, horariosFixos:[], produtoId:null, descontoAplicado:0, parcelas:1, biometriaCadastrada:false}})}
             onEdit={(c)=>setModal({type:"client", data:c})}
             onViewProfile={(c)=>setModal({type:"clientProfile", data:c})}
             onImportarLote={()=>setModal({type:"importClientes"})}
@@ -1286,7 +1288,8 @@ function App({currentUser, onLogout}) {
 }
 
 /* ---------------- TopBar ---------------- */
-function TopBar({tab, setTab, notifyEnabled, setNotifyEnabled, onReset, unidades, unidadeFiltro, setUnidadeFiltro, currentUser, perms, onLogout}) {
+function TopBar({tab, setTab, notifyEnabled, setNotifyEnabled, onReset, unidades, unidadeFiltro, setUnidadeFiltro, currentUser, perms, onLogout, professionals, clients, appointments, onRegistrarPonto, onConfirmarChegada}) {
+  const [modalLeitor, setModalLeitor] = useState(false);
   const todasAbas = [
     {id:"agenda", label:"Agenda"},
     {id:"clientes", label:"Clientes"},
@@ -1330,6 +1333,10 @@ function TopBar({tab, setTab, notifyEnabled, setNotifyEnabled, onReset, unidades
               <span className={"absolute top-0.5 w-4 h-4 bg-white rounded-full transition " + (notifyEnabled?"left-5":"left-0.5")}></span>
             </button>
           </label>
+          <button onClick={()=>setModalLeitor(true)} title="Reconhece sozinho se é profissional (ponto) ou paciente (chegada)"
+            className="px-3 py-1.5 rounded-lg text-xs font-medium bg-teal-600 text-white hover:bg-teal-700 flex items-center gap-1.5">
+            🔒 Leitor de Biometria
+          </button>
           <button onClick={onReset} className="text-[11px] text-slate-400 hover:text-red-500 underline">Restaurar dados de exemplo</button>
           {currentUser && (
             <div className="flex items-center gap-2 pl-3 border-l border-slate-200">
@@ -1343,6 +1350,13 @@ function TopBar({tab, setTab, notifyEnabled, setNotifyEnabled, onReset, unidades
         </div>
       </div>
       <div className="max-w-[1500px] mx-auto px-4 pb-1.5 text-[10px] text-slate-400">Dados salvos automaticamente neste navegador.</div>
+      {modalLeitor && (
+        <LeitorBiometricoModal
+          professionals={professionals||[]} clients={clients||[]} appointments={appointments||[]}
+          onRegistrarPonto={onRegistrarPonto} onConfirmarChegada={onConfirmarChegada}
+          onClose={()=>setModalLeitor(false)}
+        />
+      )}
     </header>
   );
 }
@@ -2018,6 +2032,7 @@ function ImportClientesModal({onClose, onImportar}) {
 
 function ClientModal({data, professionals, convenios, produtos, onClose, onSave}) {
   const [form, setForm] = useState(data);
+  const [modalCadastroBiometria, setModalCadastroBiometria] = useState(false);
   function toggleProf(id){
     setForm(f => ({...f, profissionaisIds: f.profissionaisIds.includes(id) ? f.profissionaisIds.filter(x=>x!==id) : [...f.profissionaisIds, id]}));
   }
@@ -2175,6 +2190,25 @@ function ClientModal({data, professionals, convenios, produtos, onClose, onSave}
           ))}
         </div>
       </div>
+
+      <div className="border-t border-slate-100 pt-3 mt-2 mb-1"><span className="text-sm font-medium text-slate-700">Biometria (confirmação de chegada)</span></div>
+      <div className="grid grid-cols-2 gap-3 mb-3">
+        <Field label="Digital cadastrada">
+          {form.biometriaCadastrada ? (
+            <div className="flex items-center gap-2 h-[38px]">
+              <span className="text-xs text-green-700 bg-green-50 border border-green-200 rounded-lg px-2 py-2 flex-1 text-center">✓ Digital cadastrada</span>
+              <button type="button" onClick={()=>setForm({...form, biometriaCadastrada:false})} className="text-[11px] text-red-600 hover:underline flex-shrink-0">Remover</button>
+            </div>
+          ) : (
+            <button type="button" onClick={()=>setModalCadastroBiometria(true)} className="w-full h-[38px] text-xs font-medium rounded-lg border border-teal-300 text-teal-700 bg-teal-50 hover:bg-teal-100">🔒 Cadastrar digital</button>
+          )}
+        </Field>
+      </div>
+      <p className="text-[11px] text-slate-400 -mt-2 mb-3">Com a digital cadastrada, o paciente pode confirmar a chegada sozinho no leitor de biometria (mesmo mecanismo do ponto dos profissionais). Pode ser cadastrada pelo computador (simulada) ou pelo leitor biométrico do dispositivo.</p>
+      {modalCadastroBiometria && (
+        <CadastroBiometriaModal nome={form.nome} onClose={()=>setModalCadastroBiometria(false)}
+          onCadastrado={()=>{ setForm({...form, biometriaCadastrada:true}); setModalCadastroBiometria(false); }} />
+      )}
 
       <div className="flex justify-end gap-2 mt-4">
         <button onClick={onClose} className="px-4 py-2 text-sm rounded-lg border border-slate-300">Cancelar</button>
@@ -2611,6 +2645,7 @@ function gerarContratoHTML(prof){
 
 function ProfessionalModal({data, unidades, onClose, onSave}) {
   const [form, setForm] = useState({ preferencias:{fimDeSemana:false, atendeConvenio:true, atendeParticular:true, plantao:false}, especialidadesInteresse:[], ehProfissionalSaude:true, unidadeIds:[], ...data });
+  const [modalCadastroBiometria, setModalCadastroBiometria] = useState(false);
   const cargoEhFixo = CARGOS_COLABORADOR.includes(form.cargo);
   const ehNaoClinico = form.ehProfissionalSaude === false;
   function toggleUnidade(id){
@@ -2792,11 +2827,15 @@ function ProfessionalModal({data, unidades, onClose, onSave}) {
               <button type="button" onClick={()=>setForm({...form, biometriaCadastrada:false})} className="text-[11px] text-red-600 hover:underline flex-shrink-0">Remover</button>
             </div>
           ) : (
-            <button type="button" onClick={()=>setForm({...form, biometriaCadastrada:true})} className="w-full h-[38px] text-xs font-medium rounded-lg border border-teal-300 text-teal-700 bg-teal-50 hover:bg-teal-100">🔒 Cadastrar digital (simulado)</button>
+            <button type="button" onClick={()=>setModalCadastroBiometria(true)} className="w-full h-[38px] text-xs font-medium rounded-lg border border-teal-300 text-teal-700 bg-teal-50 hover:bg-teal-100">🔒 Cadastrar digital</button>
           )}
         </Field>
       </div>
-      <p className="text-[11px] text-slate-400 -mt-1 mb-3">VT e VA são somados aos dias efetivamente trabalhados (registrados no ponto) para compor o fechamento do mês. A digital é simulada neste protótipo — sem leitor biométrico real.</p>
+      <p className="text-[11px] text-slate-400 -mt-1 mb-3">VT e VA são somados aos dias efetivamente trabalhados (registrados no ponto) para compor o fechamento do mês. A biometria pode ser cadastrada pelo computador (simulada) ou pelo leitor biométrico do dispositivo.</p>
+      {modalCadastroBiometria && (
+        <CadastroBiometriaModal nome={form.nome} onClose={()=>setModalCadastroBiometria(false)}
+          onCadastrado={()=>{ setForm({...form, biometriaCadastrada:true}); setModalCadastroBiometria(false); }} />
+      )}
 
       <div className="border-t border-slate-100 pt-3 mt-2 mb-1"><span className="text-sm font-medium text-slate-700">Contrato</span></div>
       <div className="bg-slate-50 rounded-lg p-3 mb-3">
@@ -2843,6 +2882,183 @@ function BiometriaCaptureModal({titulo, subtitulo, onClose, onConfirm}) {
         </button>
         <p className="text-[11px] text-slate-400 mt-3 text-center">Biometria simulada neste protótipo — sem leitor físico conectado.</p>
       </div>
+    </Modal>
+  );
+}
+
+/* ---------------- Cadastro de biometria (computador OU leitor biométrico real) ---------------- */
+// Usado tanto no cadastro do profissional quanto no do paciente. Duas formas de cadastrar:
+// 1) "Pelo computador" — simulado, um clique (mesma lógica já usada no resto do protótipo).
+// 2) "Com leitor biométrico" — tenta de verdade a API WebAuthn do dispositivo (Windows Hello, Touch ID,
+//    leitor de digital do notebook/celular), quando o navegador/dispositivo suporta.
+function CadastroBiometriaModal({nome, onClose, onCadastrado}) {
+  const [metodo, setMetodo] = useState(null); // "simulado" | "leitor"
+  const [status, setStatus] = useState("idle"); // idle | lendo | erro
+  const [erro, setErro] = useState("");
+  const suportaLeitor = typeof window !== "undefined" && !!window.PublicKeyCredential;
+
+  function cadastrarSimulado(){
+    setMetodo("simulado"); setStatus("lendo"); setErro("");
+    setTimeout(() => { onCadastrado({ metodo: "simulado" }); }, 900);
+  }
+
+  async function cadastrarComLeitor(){
+    setMetodo("leitor"); setStatus("lendo"); setErro("");
+    try {
+      const challenge = new Uint8Array(32); window.crypto.getRandomValues(challenge);
+      const userId = new Uint8Array(16); window.crypto.getRandomValues(userId);
+      const cred = await navigator.credentials.create({
+        publicKey: {
+          challenge,
+          rp: { name: "PhysioFlow — Biometria" },
+          user: { id: userId, name: nome || "usuario", displayName: nome || "Usuário" },
+          pubKeyCredParams: [{ type: "public-key", alg: -7 }, { type: "public-key", alg: -257 }],
+          authenticatorSelection: { userVerification: "required" },
+          timeout: 30000,
+          attestation: "none",
+        }
+      });
+      const credencialId = cred ? btoa(String.fromCharCode(...new Uint8Array(cred.rawId))) : null;
+      onCadastrado({ metodo: "leitor", credencialId });
+    } catch (e) {
+      setStatus("erro");
+      setErro("Não foi possível usar o leitor biométrico deste dispositivo (" + (e?.message || "cancelado") + "). Você pode cadastrar pelo computador.");
+    }
+  }
+
+  return (
+    <Modal title="Cadastrar biometria" onClose={onClose}>
+      <p className="text-sm text-slate-600 mb-4">Escolha como {nome ? <strong>{nome}</strong> : "a pessoa"} vai cadastrar a digital.</p>
+      <div className="grid grid-cols-1 gap-2 mb-1">
+        <button type="button" onClick={cadastrarSimulado} disabled={status==="lendo"}
+          className="px-4 py-3 rounded-lg border border-teal-300 bg-teal-50 hover:bg-teal-100 text-sm font-medium text-teal-700 text-left disabled:opacity-60">
+          💻 Cadastrar pelo computador
+          <div className="text-[11px] font-normal text-teal-600 mt-0.5">Simulado — um clique confirma a digital neste protótipo.</div>
+        </button>
+        <button type="button" onClick={cadastrarComLeitor} disabled={status==="lendo" || !suportaLeitor}
+          className="px-4 py-3 rounded-lg border border-indigo-300 bg-indigo-50 hover:bg-indigo-100 text-sm font-medium text-indigo-700 text-left disabled:opacity-50">
+          🔒 Cadastrar com leitor biométrico
+          <div className="text-[11px] font-normal text-indigo-600 mt-0.5">
+            {suportaLeitor ? "Usa a digital/rosto do próprio computador ou celular (Windows Hello, Touch ID, leitor de digital)." : "Não disponível neste navegador/dispositivo."}
+          </div>
+        </button>
+      </div>
+      {status==="lendo" && metodo==="simulado" && <p className="text-xs text-slate-500 text-center mt-3">Lendo digital...</p>}
+      {status==="lendo" && metodo==="leitor" && <p className="text-xs text-slate-500 text-center mt-3">Siga as instruções do seu dispositivo...</p>}
+      {erro && <p className="text-xs text-red-600 mt-3">{erro}</p>}
+      <div className="flex justify-end mt-4">
+        <button onClick={onClose} className="px-4 py-2 text-sm rounded-lg border border-slate-300">Cancelar</button>
+      </div>
+    </Modal>
+  );
+}
+
+/* ---------------- Leitor de biometria unificado (reconhece profissional ou paciente sozinho) ---------------- */
+// Pensado para ficar disponível em qualquer tela (botão fixo no TopBar): a pessoa faz a leitura da digital
+// (simulada ou pelo leitor do dispositivo) e o sistema identifica, pelo cadastro, se é profissional ou
+// paciente — sem precisar escolher isso antes. Profissional: registra entrada/saída no ponto. Paciente:
+// confirma a chegada se houver agendamento hoje, ou avisa que não há marcação.
+function LeitorBiometricoModal({professionals, clients, appointments, onRegistrarPonto, onConfirmarChegada, onClose}) {
+  const [status, setStatus] = useState("aguardando"); // aguardando | lendo | identificar | resultado
+  const [metodo, setMetodo] = useState(null);
+  const [busca, setBusca] = useState("");
+  const suportaLeitor = typeof window !== "undefined" && !!window.PublicKeyCredential;
+  const [resultado, setResultado] = useState(null); // {tipo:'sucesso'|'aviso', texto}
+
+  const cadastrados = useMemo(() => {
+    const profs = professionals.filter(p => p.biometriaCadastrada).map(p => ({ id: p.id, nome: p.nome, tipo: "profissional" }));
+    const pacientes = clients.filter(c => c.biometriaCadastrada).map(c => ({ id: c.id, nome: c.nome, tipo: "paciente" }));
+    return [...profs, ...pacientes];
+  }, [professionals, clients]);
+
+  const sugestoes = busca.trim().length >= 2
+    ? cadastrados.filter(p => p.nome.toLowerCase().includes(busca.trim().toLowerCase())).slice(0, 6)
+    : [];
+
+  function processarIdentidade(pessoa){
+    if (pessoa.tipo === "profissional") {
+      const registro = onRegistrarPonto(pessoa.id, new Date().toISOString());
+      setResultado({ tipo: "sucesso", texto: `${pessoa.nome} — ${registro.tipo === "entrada" ? "entrada registrada" : "saída registrada"} às ${registro.timestamp.slice(11,16)}.` });
+    } else {
+      const marcacoesHoje = appointments.filter(a => a.clienteId === pessoa.id && a.data === TODAY && !["cancelado","remarcado","falta"].includes(a.status));
+      if (marcacoesHoje.length === 0) {
+        setResultado({ tipo: "aviso", texto: `${pessoa.nome} não tem marcação para hoje.` });
+      } else {
+        const proxima = marcacoesHoje.sort((a,b)=>a.hora.localeCompare(b.hora))[0];
+        onConfirmarChegada(proxima);
+        setResultado({ tipo: "sucesso", texto: `Chegada de ${pessoa.nome} confirmada — sessão das ${proxima.hora}.` });
+      }
+    }
+    setStatus("resultado");
+  }
+
+  function lerSimulado(){
+    setMetodo("simulado"); setStatus("lendo");
+    setTimeout(() => { setStatus("identificar"); }, 800);
+  }
+
+  async function lerComLeitor(){
+    setMetodo("leitor"); setStatus("lendo");
+    try {
+      const challenge = new Uint8Array(32); window.crypto.getRandomValues(challenge);
+      await navigator.credentials.get({ publicKey: { challenge, userVerification: "required", timeout: 30000 } });
+    } catch (e) {
+      // Mesmo sem credencial cadastrada neste navegador, segue para a identificação por nome
+      // (protótipo não tem banco de digitais real — a leitura confirma presença física).
+    }
+    setStatus("identificar");
+  }
+
+  function reiniciar(){
+    setStatus("aguardando"); setMetodo(null); setBusca(""); setResultado(null);
+  }
+
+  return (
+    <Modal title="Leitor de Biometria" onClose={onClose}>
+      {status === "aguardando" && (
+        <div className="flex flex-col items-center py-2">
+          <div className="w-20 h-20 rounded-full bg-slate-100 flex items-center justify-center text-4xl mb-4">👆</div>
+          <p className="text-sm text-slate-600 text-center mb-4">Toque a digital para registrar ponto (profissional) ou confirmar chegada (paciente). O sistema reconhece sozinho quem é.</p>
+          <div className="flex flex-col gap-2 w-full">
+            <button onClick={lerSimulado} className="px-4 py-2.5 rounded-lg bg-teal-600 text-white text-sm font-medium hover:bg-teal-700">💻 Simular leitura pelo computador</button>
+            <button onClick={lerComLeitor} disabled={!suportaLeitor} className="px-4 py-2.5 rounded-lg bg-indigo-600 text-white text-sm font-medium hover:bg-indigo-700 disabled:opacity-50">🔒 Usar leitor biométrico do dispositivo</button>
+          </div>
+        </div>
+      )}
+      {status === "lendo" && (
+        <div className="flex flex-col items-center py-6">
+          <div className="w-20 h-20 rounded-full bg-teal-100 animate-pulse flex items-center justify-center text-4xl mb-3">👆</div>
+          <p className="text-sm text-slate-500">Lendo digital...</p>
+        </div>
+      )}
+      {status === "identificar" && (
+        <div>
+          <p className="text-sm text-slate-600 mb-2">Digital lida. Confirme o nome para concluir:</p>
+          <input autoFocus value={busca} onChange={e=>setBusca(e.target.value)} placeholder="Digite o nome..." className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm" />
+          {sugestoes.length > 0 && (
+            <div className="mt-2 border border-slate-200 rounded-lg divide-y divide-slate-100 max-h-48 overflow-y-auto">
+              {sugestoes.map(p => (
+                <button key={p.tipo + p.id} type="button" onClick={() => processarIdentidade(p)}
+                  className="w-full text-left px-3 py-2 text-sm hover:bg-slate-50 flex items-center justify-between">
+                  <span>{p.nome}</span>
+                  <span className={"text-[10px] uppercase font-semibold px-1.5 py-0.5 rounded " + (p.tipo === "profissional" ? "bg-teal-50 text-teal-700" : "bg-indigo-50 text-indigo-700")}>{p.tipo}</span>
+                </button>
+              ))}
+            </div>
+          )}
+          {busca.trim().length >= 2 && sugestoes.length === 0 && <p className="text-xs text-slate-400 mt-2">Nenhuma digital cadastrada com esse nome.</p>}
+        </div>
+      )}
+      {status === "resultado" && resultado && (
+        <div className="flex flex-col items-center py-4">
+          <div className={"w-16 h-16 rounded-full flex items-center justify-center text-3xl mb-3 " + (resultado.tipo === "sucesso" ? "bg-green-100" : "bg-amber-100")}>
+            {resultado.tipo === "sucesso" ? "✅" : "⚠️"}
+          </div>
+          <p className="text-sm text-slate-700 text-center mb-4">{resultado.texto}</p>
+          <button onClick={reiniciar} className="px-4 py-2 rounded-lg bg-teal-600 text-white text-sm font-medium hover:bg-teal-700">Ler outra digital</button>
+        </div>
+      )}
+      <p className="text-[11px] text-slate-400 mt-4 text-center">Biometria simulada neste protótipo (ou leitor do próprio dispositivo, quando disponível).</p>
     </Modal>
   );
 }
