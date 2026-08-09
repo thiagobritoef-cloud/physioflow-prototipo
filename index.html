@@ -2980,7 +2980,7 @@ function LeitorBiometricoModal({professionals, clients, appointments, onRegistra
       const registro = onRegistrarPonto(pessoa.id, new Date().toISOString());
       setResultado({ tipo: "sucesso", texto: `${pessoa.nome} — ${registro.tipo === "entrada" ? "entrada registrada" : "saída registrada"} às ${registro.timestamp.slice(11,16)}.` });
     } else {
-      const marcacoesHoje = appointments.filter(a => a.clienteId === pessoa.id && a.data === TODAY && !["cancelado","remarcado","falta"].includes(a.status));
+      const marcacoesHoje = appointments.filter(a => a.clienteId === pessoa.id && a.data === TODAY && !["desmarcado","remarcado","faltou"].includes(a.status));
       if (marcacoesHoje.length === 0) {
         setResultado({ tipo: "aviso", texto: `${pessoa.nome} não tem marcação para hoje.` });
       } else {
