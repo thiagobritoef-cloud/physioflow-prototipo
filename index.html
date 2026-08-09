@@ -32,11 +32,11 @@ const sbClient = window.supabase ? window.supabase.createClient(SUPABASE_URL, SU
 // Isso é um gate de UI: a proteção de verdade (linha a linha, por RLS no Postgres) é um passo seguinte —
 // hoje os dados operacionais (agenda, clientes etc.) ainda vivem no localStorage do navegador.
 const PERMISSOES = {
-  admin:          { label: "Gestor",         tabs: ["agenda","clientes","profissionais","guias","catalogo","caixa","fichas","dashboard","usuarios","notificacoes"] },
-  recepcao:       { label: "Recepção",       tabs: ["agenda","clientes","guias","caixa","fichas","notificacoes"] },
-  fisioterapeuta: { label: "Fisioterapeuta", tabs: ["agenda","clientes","guias","fichas","dashboard","notificacoes"], agendaSomenteProprio: true },
+  admin:          { label: "Gestor",         tabs: ["agenda","clientes","profissionais","guias","catalogo","caixa","ponto","fichas","dashboard","usuarios","notificacoes"] },
+  recepcao:       { label: "Recepção",       tabs: ["agenda","clientes","guias","caixa","ponto","fichas","notificacoes"] },
+  fisioterapeuta: { label: "Fisioterapeuta", tabs: ["agenda","clientes","guias","ponto","fichas","dashboard","notificacoes"], agendaSomenteProprio: true },
   faturamento:    { label: "Faturamento",    tabs: ["clientes","guias","catalogo","dashboard","notificacoes"] },
-  financeiro:     { label: "Financeiro",     tabs: ["caixa","dashboard","notificacoes"] },
+  financeiro:     { label: "Financeiro",     tabs: ["caixa","ponto","dashboard","notificacoes"] },
 };
 function permissoesDoPerfil(role){ return PERMISSOES[role] || { label: role || "Usuário", tabs: ["agenda","notificacoes"] }; }
 
@@ -80,22 +80,22 @@ const initialProfessionals = [
     tipoVinculo:"Colaborador PJ", cpf:"111.111.111-11", rg:"11.111.111-1", dataNascimento:"1990-03-15", endereco:"Rua das Palmeiras, 55 - São Paulo/SP", telefonePessoal:"(11) 99111-1111", email:"marina.alves@physioflow.com",
     dataAdmissao:addDays(TODAY,-420), foto:null, bio:"Fisioterapeuta ortopédica com foco em coluna e reabilitação pós-cirúrgica. 8 anos de clínica.",
     especialidadesInteresse:["RPG","Ortopedia","Coluna"], preferencias:{fimDeSemana:false, atendeConvenio:true, atendeParticular:true, plantao:false},
-    contratoArquivo:null, contratoGeradoEm:null },
+    contratoArquivo:null, contratoGeradoEm:null, valorValeTransporteDia:0, valorValeAlimentacaoDia:0, biometriaCadastrada:true },
   { id:"p2", nome:"Dr. Rafael Souza", unidadeIds:["u1","u2"], ehProfissionalSaude:true, conselho:"CREFITO-3 654321-F", crefito:"CREFITO-3 654321-F", cbo:"225133", cargo:"Fisioterapeuta Esportivo", sala:"Sala 2", dias:["Seg","Qua","Sex"], horaInicio:"07:00", horaFim:"16:00", comissaoTipo:"percentual", comissaoPercentual:35, comissaoValorSessao:0, salarioFixoMensal:0, bonusMensal:0, custoFixoMensal:500,
     tipoVinculo:"Parceiro", cpf:"222.222.222-22", rg:"22.222.222-2", dataNascimento:"1987-07-22", endereco:"Av. Brigadeiro, 800 - São Paulo/SP", telefonePessoal:"(11) 99222-2222", email:"rafael.souza@physioflow.com",
     dataAdmissao:addDays(TODAY,-900), foto:null, bio:"Especialista em fisioterapia esportiva e reabilitação de joelho, atende atletas amadores e profissionais.",
     especialidadesInteresse:["Esportiva","Joelho","Reabilitação"], preferencias:{fimDeSemana:true, atendeConvenio:true, atendeParticular:true, plantao:true},
-    contratoArquivo:null, contratoGeradoEm:null },
+    contratoArquivo:null, contratoGeradoEm:null, valorValeTransporteDia:0, valorValeAlimentacaoDia:0, biometriaCadastrada:true },
   { id:"p3", nome:"Dra. Camila Nunes", unidadeIds:["u1"], ehProfissionalSaude:true, conselho:"CREFITO-3 987654-F", crefito:"CREFITO-3 987654-F", cbo:"225125", cargo:"Pilates Clínico", sala:"Sala de Pilates", dias:["Ter","Qui","Sáb"], horaInicio:"09:00", horaFim:"17:00", comissaoTipo:"fixo", comissaoPercentual:0, comissaoValorSessao:40, salarioFixoMensal:0, bonusMensal:0, custoFixoMensal:300,
     tipoVinculo:"Colaborador CLT", cpf:"333.333.333-33", rg:"33.333.333-3", dataNascimento:"1993-11-02", endereco:"Rua Augusta, 1200 - São Paulo/SP", telefonePessoal:"(11) 99333-3333", email:"camila.nunes@physioflow.com",
     dataAdmissao:addDays(TODAY,-180), foto:null, bio:"Instrutora de Pilates clínico, trabalha reabilitação postural e fortalecimento para pacientes com dor crônica.",
     especialidadesInteresse:["Pilates","Postura"], preferencias:{fimDeSemana:true, atendeConvenio:true, atendeParticular:false, plantao:false},
-    contratoArquivo:null, contratoGeradoEm:null },
+    contratoArquivo:null, contratoGeradoEm:null, valorValeTransporteDia:11, valorValeAlimentacaoDia:35, biometriaCadastrada:true },
   { id:"p4", nome:"Juliana Prado", unidadeIds:["u1"], ehProfissionalSaude:false, conselho:"", crefito:"", cbo:"", cargo:"Recepção", sala:"Recepção", dias:["Seg","Ter","Qua","Qui","Sex"], horaInicio:"08:00", horaFim:"18:00", comissaoTipo:"salario", comissaoPercentual:0, comissaoValorSessao:0, salarioFixoMensal:2200, bonusMensal:150, custoFixoMensal:0,
     tipoVinculo:"Colaborador CLT", cpf:"444.444.444-44", rg:"44.444.444-4", dataNascimento:"1998-05-10", endereco:"Rua Vergueiro, 300 - São Paulo/SP", telefonePessoal:"(11) 99444-4444", email:"juliana.prado@physioflow.com",
     dataAdmissao:addDays(TODAY,-260), foto:null, bio:"Recepção e atendimento ao paciente — agendamentos, confirmações e primeiro contato da clínica.",
     especialidadesInteresse:["Atendimento","Agenda"], preferencias:{fimDeSemana:false, atendeConvenio:false, atendeParticular:false, plantao:false},
-    contratoArquivo:null, contratoGeradoEm:null },
+    contratoArquivo:null, contratoGeradoEm:null, valorValeTransporteDia:8.8, valorValeAlimentacaoDia:32, biometriaCadastrada:true },
 ];
 
 const initialClients = [
@@ -176,6 +176,71 @@ function formatarRemuneracao(prof){
   return `${prof.comissaoPercentual??0}% sobre faturamento`;
 }
 function fmtDataBR(iso){ if(!iso) return "—"; const [y,m,d]=iso.split("-"); return `${d}/${m}/${y}`; }
+
+// ---- Ponto eletrônico / banco de horas / fechamento mensal ----
+const TOLERANCIA_HORA_EXTRA_MIN = 10; // minutos de tolerância antes de considerar hora extra
+function minutosEntre(isoInicio, isoFim){ return (new Date(isoFim) - new Date(isoInicio)) / 60000; }
+function calcularJornadaEsperadaMin(prof){
+  if (!prof || !prof.horaInicio || !prof.horaFim) return 0;
+  const [hi,mi] = prof.horaInicio.split(":").map(Number);
+  const [hf,mf] = prof.horaFim.split(":").map(Number);
+  return Math.max(0, (hf*60+mf) - (hi*60+mi));
+}
+// Junta as marcações do dia em pares entrada→saída e soma os minutos efetivamente trabalhados.
+function minutosTrabalhadosNoDia(profissionalId, dataDia, pontoRegistros){
+  const doDia = pontoRegistros.filter(r=>r.profissionalId===profissionalId && r.timestamp.slice(0,10)===dataDia).sort((a,b)=>a.timestamp.localeCompare(b.timestamp));
+  let total = 0;
+  for (let i=0; i<doDia.length-1; i+=2) {
+    if (doDia[i].tipo==="entrada" && doDia[i+1]?.tipo==="saida") total += minutosEntre(doDia[i].timestamp, doDia[i+1].timestamp);
+  }
+  return total;
+}
+function diasComPontoNoMes(profissionalId, mes, ano, pontoRegistros){
+  const dias = new Set();
+  pontoRegistros.filter(r=>r.profissionalId===profissionalId).forEach(r=>{
+    const [y,m] = r.timestamp.slice(0,7).split("-").map(Number);
+    if (y===ano && m===mes) dias.add(r.timestamp.slice(0,10));
+  });
+  return Array.from(dias).sort();
+}
+// Saldo do banco de horas: déficits (trabalhou menos que o esperado) entram sozinhos; excedentes só entram
+// depois que o gestor liberar com a própria senha (RN pedida pelo usuário) — senão ficam de fora do saldo.
+function calcularSaldoBancoHoras(profissionalId, professionals, pontoRegistros, horasExtras){
+  const prof = professionals.find(p=>p.id===profissionalId);
+  if (!prof) return 0;
+  const jornadaMin = calcularJornadaEsperadaMin(prof);
+  const dias = new Set(pontoRegistros.filter(r=>r.profissionalId===profissionalId).map(r=>r.timestamp.slice(0,10)));
+  let saldoMin = 0;
+  dias.forEach(dia => {
+    const trabalhadoMin = minutosTrabalhadosNoDia(profissionalId, dia, pontoRegistros);
+    if (trabalhadoMin <= 0) return;
+    const delta = trabalhadoMin - jornadaMin;
+    if (delta <= 0) { saldoMin += delta; return; }
+    const extra = horasExtras.find(h=>h.profissionalId===profissionalId && h.data===dia);
+    if (extra && extra.status==="aprovada") saldoMin += delta;
+  });
+  return saldoMin;
+}
+function formatarSaldoHoras(minutos){
+  const sinal = minutos < 0 ? "-" : "";
+  const abs = Math.round(Math.abs(minutos));
+  const h = Math.floor(abs/60), m = abs%60;
+  return `${sinal}${h}h${String(m).padStart(2,"0")}`;
+}
+// Fechamento mensal: dias com ponto batido, horas totais, saldo do banco de horas e o valor de
+// pagamento + vale-transporte + vale-alimentação a pagar no mês seguinte, por profissional.
+function gerarFechamentoMensal(professionals, pontoRegistros, horasExtras, mes, ano){
+  return professionals.map(prof => {
+    const dias = diasComPontoNoMes(prof.id, mes, ano, pontoRegistros);
+    const minutosTotais = dias.reduce((s,d)=>s+minutosTrabalhadosNoDia(prof.id, d, pontoRegistros), 0);
+    const saldoBancoHoras = calcularSaldoBancoHoras(prof.id, professionals, pontoRegistros, horasExtras);
+    const diasTrabalhados = dias.length;
+    const valorVT = diasTrabalhados * (prof.valorValeTransporteDia||0);
+    const valorVA = diasTrabalhados * (prof.valorValeAlimentacaoDia||0);
+    const valorSalario = prof.comissaoTipo === "salario" ? (prof.salarioFixoMensal||0) + (prof.bonusMensal||0) : 0;
+    return { profissional: prof, diasTrabalhados, minutosTotais, saldoBancoHoras, valorVT, valorVA, valorSalario, valorTotal: valorSalario + valorVT + valorVA };
+  });
+}
 
 // Persistência local (mantém os dados entre recarregamentos da página, neste navegador/computador)
 const STORAGE_PREFIX = "physioflow_v1_";
@@ -529,6 +594,10 @@ function App({currentUser, onLogout}) {
   const [produtos, setProdutos] = useState(() => loadPersisted("produtos", produtosIniciais));
   const [unidades, setUnidades] = useState(() => loadPersisted("unidades", unidadesIniciais));
   const [procedimentosTuss, setProcedimentosTuss] = useState(() => loadPersisted("procedimentosTuss", procedimentosTussIniciais));
+  // Ponto eletrônico: marcações de entrada/saída (biometria simulada) e solicitações de hora extra
+  // que ficam pendentes até o gestor liberar com a própria senha (RN pedida pelo usuário).
+  const [pontoRegistros, setPontoRegistros] = useState(() => loadPersisted("pontoRegistros", []));
+  const [horasExtras, setHorasExtras] = useState(() => loadPersisted("horasExtras", []));
   const [selectedDate, setSelectedDate] = useState(TODAY);
   const [unidadeFiltro, setUnidadeFiltro] = useState(() => loadPersisted("unidadeFiltro", "todas")); // P0-1: dimensão global de unidade
   const [notifyEnabled, setNotifyEnabled] = useState(() => loadPersisted("notifyEnabled", true));
@@ -549,6 +618,8 @@ function App({currentUser, onLogout}) {
   useEffect(()=>{ savePersisted("produtos", produtos); }, [produtos]);
   useEffect(()=>{ savePersisted("unidades", unidades); }, [unidades]);
   useEffect(()=>{ savePersisted("procedimentosTuss", procedimentosTuss); }, [procedimentosTuss]);
+  useEffect(()=>{ savePersisted("pontoRegistros", pontoRegistros); }, [pontoRegistros]);
+  useEffect(()=>{ savePersisted("horasExtras", horasExtras); }, [horasExtras]);
   useEffect(()=>{ savePersisted("unidadeFiltro", unidadeFiltro); }, [unidadeFiltro]);
   useEffect(()=>{ savePersisted("notifyEnabled", notifyEnabled); }, [notifyEnabled]);
   useEffect(()=>{ savePersisted("log", log); }, [log]);
@@ -613,6 +684,56 @@ function App({currentUser, onLogout}) {
     if (appt.guiaId && !seraAtendido && eraAtendido) {
       estornarSessaoGuia(appt.guiaId);
     }
+  }
+
+  // ---- Ponto eletrônico (biometria simulada) ----
+  // Detecta sozinho se a marcação é de entrada ou saída olhando a última marcação do profissional no dia
+  // (mesma lógica de qualquer relógio de ponto: alterna entrada/saída a cada leitura).
+  function registrarPonto(profissionalId, dataHoraISO){
+    const dataDia = dataHoraISO.slice(0,10);
+    const doDia = pontoRegistros.filter(r => r.profissionalId===profissionalId && r.timestamp.slice(0,10)===dataDia).sort((a,b)=>a.timestamp.localeCompare(b.timestamp));
+    const ultimo = doDia[doDia.length-1];
+    const tipo = (!ultimo || ultimo.tipo==="saida") ? "entrada" : "saida";
+    const novo = { id:"pt"+Date.now()+Math.random().toString(36).slice(2,6), profissionalId, tipo, timestamp:dataHoraISO };
+    setPontoRegistros(list => [...list, novo]);
+    const prof = professionals.find(p=>p.id===profissionalId);
+    pushLog("Interno", `Ponto eletrônico: ${prof?.nome||"Profissional"} registrou ${tipo==="entrada"?"entrada":"saída"} às ${dataHoraISO.slice(11,16)} (digital simulada).`);
+    // Ao fechar o par entrada→saída do dia, confere se ultrapassou o horário cadastrado (RN pedida pelo
+    // usuário: hora extra só entra no banco de horas depois que o gestor liberar com a própria senha).
+    if (tipo === "saida" && ultimo && prof) {
+      const jornadaMin = calcularJornadaEsperadaMin(prof);
+      const trabalhadoMin = minutosEntre(ultimo.timestamp, dataHoraISO);
+      const excedenteMin = trabalhadoMin - jornadaMin;
+      if (excedenteMin > TOLERANCIA_HORA_EXTRA_MIN) {
+        const jaExiste = horasExtras.some(h => h.profissionalId===profissionalId && h.data===dataDia);
+        if (!jaExiste) {
+          setHorasExtras(list => [...list, { id:"he"+Date.now()+Math.random().toString(36).slice(2,6), profissionalId, data:dataDia, minutos:Math.round(excedenteMin), status:"pendente", aprovadoPor:null, aprovadoEm:null }]);
+          pushLog("Interno", `Hora extra detectada: ${prof.nome} trabalhou ${Math.round(excedenteMin)} min a mais em ${fmtDataBR(dataDia)} — aguardando liberação do gestor.`);
+        }
+      }
+    }
+    return novo;
+  }
+
+  // Aprovação de hora extra exige a senha do próprio gestor logado (reautentica no Supabase Auth como
+  // dupla confirmação — só quem tem a senha da conta admin consegue liberar).
+  async function aprovarHoraExtra(horaExtra, senhaGestor){
+    if (!sbClient || !currentUser?.email) return { ok:false, erro:"Sessão inválida." };
+    const { error } = await sbClient.auth.signInWithPassword({ email: currentUser.email, password: senhaGestor });
+    if (error) return { ok:false, erro:"Senha do gestor incorreta." };
+    setHorasExtras(list => list.map(h => h.id===horaExtra.id ? {...h, status:"aprovada", aprovadoPor:currentUser.nome||currentUser.email, aprovadoEm:new Date().toISOString()} : h));
+    const prof = professionals.find(p=>p.id===horaExtra.profissionalId);
+    pushLog("Interno", `Hora extra de ${prof?.nome||"Profissional"} (${fmtDataBR(horaExtra.data)}, ${horaExtra.minutos} min) liberada por ${currentUser.nome||currentUser.email}.`);
+    return { ok:true };
+  }
+
+  function recusarHoraExtra(horaExtra){
+    setHorasExtras(list => list.map(h => h.id===horaExtra.id ? {...h, status:"recusada", aprovadoPor:currentUser?.nome||currentUser?.email, aprovadoEm:new Date().toISOString()} : h));
+  }
+
+  // Confirmação de chegada do paciente reaproveita o mesmo mecanismo de biometria simulada do ponto.
+  function confirmarChegadaPaciente(appt){
+    handleStatusChange(appt, "chegou");
   }
 
   // Remarcação (RN-3.2.6): não sobrescreve o agendamento original — cria um novo, vinculado via remarcadoDeId,
@@ -1022,6 +1143,7 @@ function App({currentUser, onLogout}) {
             onMoveProfessional={handleMoveProfessional}
             onNewAppointment={(profId, dataOverride)=>setModal({type:"appt", data:{profissionalId:profId, data:dataOverride||selectedDate, hora:"09:00", status:"agendado", tipo:"sessao", duracaoMin:50, unidadeId:unidadePadraoParaProfissional(profId), clienteId:clients[0]?.id||"", sessaoAtual:1, pagamentoVinculado:false}})}
             onVenderProduto={perms.tabs.includes("caixa") ? (appt)=>setModal({type:"venderProduto", data:{clienteId:appt.clienteId, unidadeId:appt.unidadeId, data:appt.data}}) : null}
+            onConfirmarChegada={confirmarChegadaPaciente}
           />
         )}
         {tab === "clientes" && (
@@ -1035,7 +1157,7 @@ function App({currentUser, onLogout}) {
         {tab === "profissionais" && (
           <ProfissionaisPanel professionals={professionals} appointments={appointments} clients={clients} fichas={fichas}
             onNew={()=>setModal({type:"prof", data:{id:"", nome:"", unidadeIds:unidadeFiltro!=="todas"?[unidadeFiltro]:[unidades[0]?.id||""], ehProfissionalSaude:true, conselho:"", cbo:"", cargo:CARGOS_COLABORADOR[4], sala:"", dias:[], horaInicio:"08:00", horaFim:"18:00", comissaoTipo:"percentual", comissaoPercentual:30, comissaoValorSessao:0, salarioFixoMensal:0, bonusMensal:0, custoFixoMensal:0,
-              tipoVinculo:TIPOS_VINCULO[0], cpf:"", rg:"", dataNascimento:"", endereco:"", telefonePessoal:"", email:"", dataAdmissao:TODAY, foto:null, bio:"", especialidadesInteresse:[], preferencias:{fimDeSemana:false, atendeConvenio:true, atendeParticular:true, plantao:false}, contratoArquivo:null, contratoGeradoEm:null}})}
+              tipoVinculo:TIPOS_VINCULO[0], cpf:"", rg:"", dataNascimento:"", endereco:"", telefonePessoal:"", email:"", dataAdmissao:TODAY, foto:null, bio:"", especialidadesInteresse:[], preferencias:{fimDeSemana:false, atendeConvenio:true, atendeParticular:true, plantao:false}, contratoArquivo:null, contratoGeradoEm:null, valorValeTransporteDia:0, valorValeAlimentacaoDia:0, biometriaCadastrada:false}})}
             onEdit={(p)=>setModal({type:"prof", data:p})}
             onViewProfile={(p)=>setModal({type:"profProfile", data:p})}
             unidades={unidades}
@@ -1074,6 +1196,12 @@ function App({currentUser, onLogout}) {
           <CaixaPanel lancamentos={lancamentosNaUnidade} fechamentos={fechamentos}
             onNew={(data)=>setModal({type:"lancamento", data:{data, tipo:"receita", formaPagamento:"dinheiro", origemPagamento:"particular", valor:0, descricao:"", unidadeId: unidadeFiltro!=="todas"?unidadeFiltro:(unidades[0]?.id||"")}})}
             onFechar={fecharCaixa} onReabrir={reabrirCaixa}
+          />
+        )}
+        {tab === "ponto" && (
+          <PontoEletronico professionals={professionals} pontoRegistros={pontoRegistros} horasExtras={horasExtras}
+            currentUser={currentUser} perms={perms}
+            onRegistrarPonto={registrarPonto} onAprovarHoraExtra={aprovarHoraExtra} onRecusarHoraExtra={recusarHoraExtra}
           />
         )}
         {tab === "fichas" && (
@@ -1166,6 +1294,7 @@ function TopBar({tab, setTab, notifyEnabled, setNotifyEnabled, onReset, unidades
     {id:"guias", label:"Guias de Convênio"},
     {id:"catalogo", label:"Planos & Produtos"},
     {id:"caixa", label:"Fluxo de Caixa"},
+    {id:"ponto", label:"Ponto Eletrônico"},
     {id:"fichas", label:"Fichas Clínicas"},
     {id:"dashboard", label:"Dashboard"},
     {id:"usuarios", label:"Usuários"},
@@ -1219,8 +1348,9 @@ function TopBar({tab, setTab, notifyEnabled, setNotifyEnabled, onReset, unidades
 }
 
 /* ---------------- Agenda Kanban ---------------- */
-function Agenda({professionals, clients, appointments, guias, fichas, selectedDate, setSelectedDate, onStatusChange, onMoveProfessional, onNewAppointment, onVenderProduto}) {
+function Agenda({professionals, clients, appointments, guias, fichas, selectedDate, setSelectedDate, onStatusChange, onMoveProfessional, onNewAppointment, onVenderProduto, onConfirmarChegada}) {
   const dragItem = useRef(null);
+  const [apptChegadaBiometria, setApptChegadaBiometria] = useState(null);
   const [visao, setVisao] = useState("dia"); // "dia" (kanban) | "semana" (agenda individual por profissional)
   const [profissionalSemanaId, setProfissionalSemanaId] = useState(() => professionals[0]?.id || "");
   useEffect(() => {
@@ -1399,6 +1529,12 @@ function Agenda({professionals, clients, appointments, guias, fichas, selectedDa
                       className={"mt-2 w-full text-xs font-medium border rounded-md px-2 py-1 " + cfg.badge}>
                       {opcoesStatus.map(k => <option key={k} value={k}>{STATUS_CONFIG[k].label}</option>)}
                     </select>
+                    {cliente && onConfirmarChegada && opcoesStatus.includes("chegou") && appt.status !== "chegou" && (
+                      <button onClick={()=>setApptChegadaBiometria(appt)}
+                        className="mt-1.5 w-full text-[11px] font-medium text-indigo-700 bg-indigo-50 hover:bg-indigo-100 rounded-md py-1">
+                        🔒 Confirmar chegada (digital)
+                      </button>
+                    )}
                     {cliente && onVenderProduto && (
                       <button onClick={()=>onVenderProduto(appt)}
                         className="mt-1.5 w-full text-[11px] font-medium text-teal-700 bg-teal-50 hover:bg-teal-100 rounded-md py-1">
@@ -1419,6 +1555,14 @@ function Agenda({professionals, clients, appointments, guias, fichas, selectedDa
       </div>
       <p className="text-xs text-slate-400 mt-2">Dica: arraste um cartão para outra coluna para trocar o profissional responsável pela sessão.</p>
       </>
+      )}
+      {apptChegadaBiometria && (
+        <BiometriaCaptureModal
+          titulo="Confirmar chegada"
+          subtitulo={`${clients.find(c=>c.id===apptChegadaBiometria.clienteId)?.nome || "Paciente"} — confirme a chegada com a digital.`}
+          onClose={()=>setApptChegadaBiometria(null)}
+          onConfirm={()=>{ onConfirmarChegada(apptChegadaBiometria); setApptChegadaBiometria(null); }}
+        />
       )}
     </div>
   );
@@ -2637,6 +2781,23 @@ function ProfessionalModal({data, unidades, onClose, onSave}) {
         </div>
       )}
 
+      <div className="border-t border-slate-100 pt-3 mt-2 mb-1"><span className="text-sm font-medium text-slate-700">Ponto eletrônico &amp; benefícios</span></div>
+      <div className="grid grid-cols-3 gap-3">
+        <Field label="Vale-transporte por dia (R$)"><input type="number" min="0" step="0.01" className={inputCls} value={form.valorValeTransporteDia??0} onChange={e=>setForm({...form,valorValeTransporteDia:Number(e.target.value)})} /></Field>
+        <Field label="Vale-alimentação por dia (R$)"><input type="number" min="0" step="0.01" className={inputCls} value={form.valorValeAlimentacaoDia??0} onChange={e=>setForm({...form,valorValeAlimentacaoDia:Number(e.target.value)})} /></Field>
+        <Field label="Biometria (ponto eletrônico)">
+          {form.biometriaCadastrada ? (
+            <div className="flex items-center gap-2 h-[38px]">
+              <span className="text-xs text-green-700 bg-green-50 border border-green-200 rounded-lg px-2 py-2 flex-1 text-center">✓ Digital cadastrada</span>
+              <button type="button" onClick={()=>setForm({...form, biometriaCadastrada:false})} className="text-[11px] text-red-600 hover:underline flex-shrink-0">Remover</button>
+            </div>
+          ) : (
+            <button type="button" onClick={()=>setForm({...form, biometriaCadastrada:true})} className="w-full h-[38px] text-xs font-medium rounded-lg border border-teal-300 text-teal-700 bg-teal-50 hover:bg-teal-100">🔒 Cadastrar digital (simulado)</button>
+          )}
+        </Field>
+      </div>
+      <p className="text-[11px] text-slate-400 -mt-1 mb-3">VT e VA são somados aos dias efetivamente trabalhados (registrados no ponto) para compor o fechamento do mês. A digital é simulada neste protótipo — sem leitor biométrico real.</p>
+
       <div className="border-t border-slate-100 pt-3 mt-2 mb-1"><span className="text-sm font-medium text-slate-700">Contrato</span></div>
       <div className="bg-slate-50 rounded-lg p-3 mb-3">
         <div className="flex flex-wrap items-center gap-2 mb-2">
@@ -2661,6 +2822,236 @@ function ProfessionalModal({data, unidades, onClose, onSave}) {
         <button onClick={()=>onSave(form)} className="px-4 py-2 text-sm rounded-lg bg-teal-600 text-white hover:bg-teal-700">Salvar</button>
       </div>
     </Modal>
+  );
+}
+
+/* ---------------- Biometria simulada (reaproveitada no ponto e na chegada do paciente) ---------------- */
+function BiometriaCaptureModal({titulo, subtitulo, onClose, onConfirm}) {
+  const [lendo, setLendo] = useState(false);
+  function simularLeitura(){
+    setLendo(true);
+    setTimeout(() => { onConfirm(); }, 900);
+  }
+  return (
+    <Modal title={titulo || "Leitura de digital"} onClose={onClose}>
+      <div className="flex flex-col items-center py-4">
+        <div className={"w-20 h-20 rounded-full flex items-center justify-center text-4xl mb-3 " + (lendo ? "bg-teal-100 animate-pulse" : "bg-slate-100")}>👆</div>
+        <p className="text-sm text-slate-600 text-center mb-4">{subtitulo || "Posicione o dedo no leitor para confirmar."}</p>
+        <button onClick={simularLeitura} disabled={lendo}
+          className="px-5 py-2.5 rounded-lg bg-teal-600 text-white text-sm font-medium hover:bg-teal-700 disabled:opacity-60">
+          {lendo ? "Lendo digital..." : "🔒 Simular leitura de digital"}
+        </button>
+        <p className="text-[11px] text-slate-400 mt-3 text-center">Biometria simulada neste protótipo — sem leitor físico conectado.</p>
+      </div>
+    </Modal>
+  );
+}
+
+/* ---------------- Aprovação de hora extra (senha do gestor) ---------------- */
+function AprovarHoraExtraModal({horaExtra, professionals, onClose, onAprovar}) {
+  const [senha, setSenha] = useState("");
+  const [erro, setErro] = useState("");
+  const [enviando, setEnviando] = useState(false);
+  const prof = professionals.find(p => p.id === horaExtra.profissionalId);
+  async function confirmar(){
+    if (!senha) { setErro("Digite a senha do gestor."); return; }
+    setEnviando(true); setErro("");
+    const res = await onAprovar(horaExtra, senha);
+    setEnviando(false);
+    if (!res.ok) setErro(res.erro || "Não foi possível liberar.");
+  }
+  return (
+    <Modal title="Liberar hora extra" onClose={onClose}>
+      <p className="text-sm text-slate-700 mb-1"><strong>{prof?.nome || "Profissional"}</strong> — {fmtDataBR(horaExtra.data)}</p>
+      <p className="text-sm text-slate-500 mb-4">Excedente de <strong>{formatarSaldoHoras(horaExtra.minutos)}</strong> sobre o horário cadastrado. Só entra no banco de horas depois de liberado.</p>
+      <label className="block text-xs font-medium text-slate-600 mb-1">Senha do gestor</label>
+      <input type="password" autoFocus value={senha} onChange={e=>setSenha(e.target.value)} onKeyDown={e=>e.key==="Enter" && confirmar()}
+        className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm mb-1" placeholder="••••••••" />
+      {erro && <p className="text-xs text-red-600 mb-2">{erro}</p>}
+      <div className="flex justify-end gap-2 mt-4">
+        <button onClick={onClose} className="px-4 py-2 text-sm rounded-lg border border-slate-300">Cancelar</button>
+        <button onClick={confirmar} disabled={enviando} className="px-4 py-2 text-sm rounded-lg bg-teal-600 text-white hover:bg-teal-700 disabled:opacity-60">
+          {enviando ? "Verificando..." : "Liberar hora extra"}
+        </button>
+      </div>
+    </Modal>
+  );
+}
+
+/* ---------------- Ponto Eletrônico ---------------- */
+function PontoEletronico({professionals, pontoRegistros, horasExtras, currentUser, perms, onRegistrarPonto, onAprovarHoraExtra, onRecusarHoraExtra}) {
+  const souFisioterapeuta = !!perms.agendaSomenteProprio;
+  const meuProfissional = souFisioterapeuta ? professionals.find(p => p.nome === currentUser?.nome) : null;
+  const [profissionalId, setProfissionalId] = useState(() => meuProfissional?.id || professionals[0]?.id || "");
+  const [modalBiometria, setModalBiometria] = useState(false);
+  const [horaExtraSelecionada, setHoraExtraSelecionada] = useState(null);
+  const hoje = new Date();
+  const [mesFiltro, setMesFiltro] = useState(hoje.getMonth()+1);
+  const [anoFiltro, setAnoFiltro] = useState(hoje.getFullYear());
+
+  const podeAprovar = currentUser?.role === "admin";
+  const profissionalAtual = professionals.find(p => p.id === profissionalId);
+  const registrosHoje = pontoRegistros.filter(r => r.profissionalId===profissionalId && r.timestamp.slice(0,10)===TODAY).sort((a,b)=>a.timestamp.localeCompare(b.timestamp));
+  const ultimoRegistro = registrosHoje[registrosHoje.length-1];
+  const proximaMarcacao = (!ultimoRegistro || ultimoRegistro.tipo==="saida") ? "entrada" : "saida";
+  const minutosHoje = minutosTrabalhadosNoDia(profissionalId, TODAY, pontoRegistros);
+
+  const pendentes = horasExtras.filter(h => h.status === "pendente");
+  const fechamento = useMemo(() => gerarFechamentoMensal(professionals, pontoRegistros, horasExtras, mesFiltro, anoFiltro), [professionals, pontoRegistros, horasExtras, mesFiltro, anoFiltro]);
+  const totalGeral = fechamento.reduce((acc,f) => ({ salario: acc.salario+f.valorSalario, vt: acc.vt+f.valorVT, va: acc.va+f.valorVA, total: acc.total+f.valorTotal }), {salario:0, vt:0, va:0, total:0});
+
+  return (
+    <div>
+      <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
+        <h2 className="text-lg font-semibold text-slate-800">Ponto Eletrônico</h2>
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-6">
+        <div className="bg-white rounded-xl border border-slate-200 p-4 lg:col-span-1">
+          <div className="text-sm font-medium text-slate-700 mb-2">Bater ponto</div>
+          {!souFisioterapeuta && (
+            <select value={profissionalId} onChange={e=>setProfissionalId(e.target.value)} className={inputCls + " mb-3"}>
+              {professionals.map(p => <option key={p.id} value={p.id}>{p.nome}</option>)}
+            </select>
+          )}
+          {souFisioterapeuta && <div className="text-sm text-slate-600 mb-3">{profissionalAtual?.nome}</div>}
+          {profissionalAtual && !profissionalAtual.biometriaCadastrada ? (
+            <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">Este profissional ainda não tem digital cadastrada. Cadastre em Profissionais → editar.</p>
+          ) : (
+            <button onClick={()=>setModalBiometria(true)} disabled={!profissionalId}
+              className="w-full py-2.5 rounded-lg bg-teal-600 text-white text-sm font-medium hover:bg-teal-700 disabled:opacity-50">
+              🔒 Registrar {proximaMarcacao === "entrada" ? "entrada" : "saída"}
+            </button>
+          )}
+          <div className="text-xs text-slate-500 mt-3">
+            {registrosHoje.length === 0 ? "Nenhuma marcação hoje." : (
+              <>
+                <div className="font-medium text-slate-600 mb-1">Marcações de hoje</div>
+                {registrosHoje.map(r => <div key={r.id}>{r.tipo==="entrada" ? "→ Entrada" : "← Saída"} às {r.timestamp.slice(11,16)}</div>)}
+                {minutosHoje > 0 && <div className="mt-1 text-slate-600">Trabalhado hoje: <strong>{formatarSaldoHoras(minutosHoje)}</strong></div>}
+              </>
+            )}
+          </div>
+        </div>
+
+        <div className="bg-white rounded-xl border border-slate-200 p-4 lg:col-span-2">
+          <div className="text-sm font-medium text-slate-700 mb-2">Banco de horas</div>
+          <div className="overflow-x-auto">
+            <table className="w-full text-xs">
+              <thead className="text-slate-400 uppercase"><tr><th className="text-left py-1">Profissional</th><th className="text-right py-1">Saldo</th></tr></thead>
+              <tbody>
+                {professionals.map(p => {
+                  const saldo = calcularSaldoBancoHoras(p.id, professionals, pontoRegistros, horasExtras);
+                  return (
+                    <tr key={p.id} className="border-t border-slate-100">
+                      <td className="py-1.5">{p.nome}</td>
+                      <td className={"py-1.5 text-right font-medium " + (saldo < 0 ? "text-red-600" : saldo > 0 ? "text-green-700" : "text-slate-500")}>{formatarSaldoHoras(saldo)}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      {podeAprovar && (
+        <div className="bg-white rounded-xl border border-slate-200 p-4 mb-6">
+          <div className="text-sm font-medium text-slate-700 mb-2">Horas extras aguardando liberação</div>
+          {pendentes.length === 0 ? (
+            <p className="text-xs text-slate-400">Nenhuma hora extra pendente.</p>
+          ) : (
+            <div className="flex flex-col gap-2">
+              {pendentes.map(h => {
+                const prof = professionals.find(p=>p.id===h.profissionalId);
+                return (
+                  <div key={h.id} className="flex items-center justify-between bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 text-xs">
+                    <span><strong>{prof?.nome||"Profissional"}</strong> — {fmtDataBR(h.data)} — excedente de {formatarSaldoHoras(h.minutos)}</span>
+                    <div className="flex gap-2 flex-shrink-0">
+                      <button onClick={()=>setHoraExtraSelecionada(h)} className="px-2.5 py-1 rounded-md bg-teal-600 text-white hover:bg-teal-700">Liberar com senha</button>
+                      <button onClick={()=>onRecusarHoraExtra(h)} className="px-2.5 py-1 rounded-md border border-slate-300 text-slate-600 hover:bg-slate-50">Recusar</button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      )}
+
+      {(currentUser?.role === "admin" || currentUser?.role === "financeiro") && (
+        <div className="bg-white rounded-xl border border-slate-200 p-4">
+          <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
+            <div className="text-sm font-medium text-slate-700">Fechamento do mês (pagamento do mês seguinte)</div>
+            <div className="flex gap-2">
+              <select value={mesFiltro} onChange={e=>setMesFiltro(Number(e.target.value))} className="border border-slate-300 rounded-lg px-2 py-1 text-xs">
+                {MESES_PT.map((m,i) => <option key={i} value={i+1}>{m}</option>)}
+              </select>
+              <select value={anoFiltro} onChange={e=>setAnoFiltro(Number(e.target.value))} className="border border-slate-300 rounded-lg px-2 py-1 text-xs">
+                {[anoFiltro-1, anoFiltro, anoFiltro+1].filter((v,i,a)=>a.indexOf(v)===i).map(a => <option key={a} value={a}>{a}</option>)}
+              </select>
+            </div>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full text-xs">
+              <thead className="text-slate-400 uppercase">
+                <tr>
+                  <th className="text-left py-1.5">Profissional</th>
+                  <th className="text-right py-1.5">Dias trabalhados</th>
+                  <th className="text-right py-1.5">Horas no mês</th>
+                  <th className="text-right py-1.5">Banco de horas</th>
+                  <th className="text-right py-1.5">Salário</th>
+                  <th className="text-right py-1.5">Vale-transporte</th>
+                  <th className="text-right py-1.5">Vale-alimentação</th>
+                  <th className="text-right py-1.5">Total a pagar</th>
+                </tr>
+              </thead>
+              <tbody>
+                {fechamento.map(f => (
+                  <tr key={f.profissional.id} className="border-t border-slate-100">
+                    <td className="py-1.5">{f.profissional.nome}</td>
+                    <td className="py-1.5 text-right">{f.diasTrabalhados}</td>
+                    <td className="py-1.5 text-right">{formatarSaldoHoras(f.minutosTotais)}</td>
+                    <td className={"py-1.5 text-right " + (f.saldoBancoHoras<0 ? "text-red-600" : "text-green-700")}>{formatarSaldoHoras(f.saldoBancoHoras)}</td>
+                    <td className="py-1.5 text-right">{fmtBRL(f.valorSalario)}</td>
+                    <td className="py-1.5 text-right">{fmtBRL(f.valorVT)}</td>
+                    <td className="py-1.5 text-right">{fmtBRL(f.valorVA)}</td>
+                    <td className="py-1.5 text-right font-semibold text-slate-800">{fmtBRL(f.valorTotal)}</td>
+                  </tr>
+                ))}
+              </tbody>
+              <tfoot>
+                <tr className="border-t-2 border-slate-200 font-semibold text-slate-800">
+                  <td className="py-2" colSpan="4">Total geral</td>
+                  <td className="py-2 text-right">{fmtBRL(totalGeral.salario)}</td>
+                  <td className="py-2 text-right">{fmtBRL(totalGeral.vt)}</td>
+                  <td className="py-2 text-right">{fmtBRL(totalGeral.va)}</td>
+                  <td className="py-2 text-right">{fmtBRL(totalGeral.total)}</td>
+                </tr>
+              </tfoot>
+            </table>
+          </div>
+          <p className="text-[11px] text-slate-400 mt-2">Calculado a partir das marcações de ponto do mês e do cadastro de cada profissional (horário, salário e valores diários de VT/VA).</p>
+        </div>
+      )}
+
+      {modalBiometria && (
+        <BiometriaCaptureModal
+          titulo={proximaMarcacao === "entrada" ? "Registrar entrada" : "Registrar saída"}
+          subtitulo={`${profissionalAtual?.nome || ""} — confirme com a digital para bater o ponto.`}
+          onClose={()=>setModalBiometria(false)}
+          onConfirm={()=>{ onRegistrarPonto(profissionalId, new Date().toISOString()); setModalBiometria(false); }}
+        />
+      )}
+      {horaExtraSelecionada && (
+        <AprovarHoraExtraModal
+          horaExtra={horaExtraSelecionada}
+          professionals={professionals}
+          onClose={()=>setHoraExtraSelecionada(null)}
+          onAprovar={async (h,senha) => { const res = await onAprovarHoraExtra(h,senha); if (res.ok) setHoraExtraSelecionada(null); return res; }}
+        />
+      )}
+    </div>
   );
 }
 
