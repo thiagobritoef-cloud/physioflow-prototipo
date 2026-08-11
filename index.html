@@ -1155,9 +1155,13 @@ function App({currentUser, onLogout}) {
     pushLog("Interno", `Importação em lote da tabela TUSS: ${linhas.length} linha(s) processada(s).`);
   }
 
+  // Correção pedida explicitamente pelo usuário: só médicos e fisioterapeutas (ehProfissionalSaude=true)
+  // têm agenda de atendimento — colaboradores administrativos (recepção, financeiro, etc.) não aparecem
+  // como opção de profissional em nenhum lugar ligado a agendamento/atendimento clínico.
+  const profissionaisClinicos = useMemo(() => professionals.filter(p => p.ehProfissionalSaude), [professionals]);
   // P0-1 (2.1): unidade como dimensão global — filtra Agenda/Caixa/Dashboard sem afetar a detecção de conflitos
   // (que precisa enxergar TODOS os agendamentos, de todas as unidades, para nunca dar profissional em dobro — RN-2.1.1).
-  const profissionaisNaUnidadeBase = useMemo(() => unidadeFiltro==="todas" ? professionals : professionals.filter(p=>(p.unidadeIds||[]).includes(unidadeFiltro)), [professionals, unidadeFiltro]);
+  const profissionaisNaUnidadeBase = useMemo(() => unidadeFiltro==="todas" ? profissionaisClinicos : profissionaisClinicos.filter(p=>(p.unidadeIds||[]).includes(unidadeFiltro)), [profissionaisClinicos, unidadeFiltro]);
   const appointmentsNaUnidadeBase = useMemo(() => unidadeFiltro==="todas" ? appointments : appointments.filter(a=>a.unidadeId===unidadeFiltro), [appointments, unidadeFiltro]);
   // Fisioterapeuta só vê a própria agenda. O vínculo é feito por nome (staff_profiles x professionals) até a
   // migração de dados para o Supabase ligar as duas tabelas por id de verdade — ver PLANO_MIGRACAO_SUPABASE.md.
@@ -1287,12 +1291,12 @@ function App({currentUser, onLogout}) {
       </main>
 
       {modal?.type === "appt" && (
-        <AppointmentModal data={modal.data} clients={clients} professionals={professionals} guias={guias}
+        <AppointmentModal data={modal.data} clients={clients} professionals={profissionaisClinicos} guias={guias}
           appointments={appointments} unidades={unidades} produtos={produtos}
           onClose={()=>setModal(null)} onSave={createAppointment} onVincularProduto={vincularProdutoAoCliente} />
       )}
       {modal?.type === "client" && (
-        <ClientModal data={modal.data} professionals={professionals} convenios={convenios} produtos={produtos} currentUser={currentUser} onClose={()=>setModal(null)} onSave={saveClient} />
+        <ClientModal data={modal.data} professionals={profissionaisClinicos} convenios={convenios} produtos={produtos} currentUser={currentUser} onClose={()=>setModal(null)} onSave={saveClient} />
       )}
       {modal?.type === "importClientes" && (
         <ImportClientesModal onClose={()=>setModal(null)} onImportar={importarClientesLote} />
