@@ -1326,7 +1326,7 @@ function App({currentUser, onLogout}) {
         )}
         {tab === "clientes" && (
           <ClientList clients={clients} professionals={professionals} appointments={appointments}
-            onNew={()=>setModal({type:"client", data:{id:"", nome:"", telefone:"", email:"", endereco:"", dataNascimento:"", cpf:"", numeroCarteirinha:"", convenio:"", pagamento:{tipo:"particular", numeroGuia:""}, medico:"", telefoneEmergencia:"", tratamento:"", pacoteNome:"", sessoesTotal:10, dataInicio:TODAY, profissionaisIds:[], valorSessao:0, alta:null, horariosFixos:[], produtoId:null, descontoAplicado:0, parcelas:1, biometriaCadastrada:false}})}
+            onNew={()=>setModal({type:"client", data:{id:"", nome:"", telefone:"", email:"", endereco:"", dataNascimento:"", cpf:"", numeroCarteirinha:"", convenio:"", pagamento:{tipo:"particular", numeroGuia:""}, medico:"", telefoneEmergencia:"", tratamento:"", pacoteNome:"", sessoesTotal:10, dataInicio:TODAY, profissionaisIds:[], valorSessao:0, alta:null, horariosFixos:[], produtoId:null, descontoAplicado:0, parcelas:1, biometriaCadastrada:false, observacoes:""}})}
             onEdit={(c)=>setModal({type:"client", data:c})}
             onViewProfile={(c)=>setModal({type:"clientProfile", data:c})}
             onImportarLote={()=>setModal({type:"importClientes"})}
@@ -1413,7 +1413,7 @@ function App({currentUser, onLogout}) {
           onClose={()=>setModal(null)} onSave={createAppointment} onVincularProduto={vincularProdutoAoCliente} />
       )}
       {modal?.type === "client" && (
-        <ClientModal data={modal.data} professionals={profissionaisClinicos} convenios={convenios} produtos={produtos} currentUser={currentUser} onClose={()=>setModal(null)} onSave={saveClient} />
+        <ClientModal data={modal.data} professionals={profissionaisClinicos} convenios={convenios} produtos={produtos} fichas={fichas} modelosFicha={modelosFicha} currentUser={currentUser} onClose={()=>setModal(null)} onSave={saveClient} />
       )}
       {modal?.type === "importClientes" && (
         <ImportClientesModal onClose={()=>setModal(null)} onImportar={importarClientesLote} />
@@ -2300,7 +2300,7 @@ function ImportClientesModal({onClose, onImportar}) {
   );
 }
 
-function ClientModal({data, professionals, convenios, produtos, currentUser, onClose, onSave}) {
+function ClientModal({data, professionals, convenios, produtos, fichas, modelosFicha, currentUser, onClose, onSave}) {
   const [form, setForm] = useState(data);
   const [modalCadastroBiometria, setModalCadastroBiometria] = useState(false);
   const [descontoAutorizado, setDescontoAutorizado] = useState(false);
@@ -2316,6 +2316,10 @@ function ClientModal({data, professionals, convenios, produtos, currentUser, onC
   const valorFinalProduto = produtoSelecionado ? produtoSelecionado.precoBase * (1 - (Number(form.descontoAplicado)||0)/100) : null;
   // Desconto fora da faixa mín.–máx. do produto exige autorização do gestor (senha) antes de poder salvar.
   const descontoForaDaFaixa = !!produtoSelecionado && ((Number(form.descontoAplicado)||0) > descontoMax || (Number(form.descontoAplicado)||0) < descontoMin);
+  // RN pedida explicitamente pelo usuário: mostrar as fichas clínicas do cliente aqui no próprio cadastro
+  // (só faz sentido para cliente já existente — um cliente novo ainda não tem ficha nenhuma). Lista somativa
+  // e só leitura (criar/editar ficha continua sendo feito pela aba Fichas Clínicas).
+  const fichasDoCliente = (data.id && fichas) ? fichas.filter(f=>f.clienteId===data.id).sort((a,b)=>b.data.localeCompare(a.data)) : [];
   return (
     <Modal title={data.id ? "Editar cliente" : "Novo cliente"} onClose={onClose} wide>
       <div className="grid grid-cols-2 gap-x-4">
@@ -2502,6 +2506,37 @@ function ClientModal({data, professionals, convenios, produtos, currentUser, onC
       {modalCadastroBiometria && (
         <CadastroBiometriaModal nome={form.nome} onClose={()=>setModalCadastroBiometria(false)}
           onCadastrado={()=>{ setForm({...form, biometriaCadastrada:true}); setModalCadastroBiometria(false); }} />
+      )}
+
+      <div className="border-t border-slate-100 pt-3 mt-2 mb-1"><span className="text-sm font-medium text-slate-700">Observações</span></div>
+      <Field label="">
+        <textarea rows={3} className={inputCls + " resize-y"} value={form.observacoes||""}
+          onChange={e=>setForm({...form, observacoes:e.target.value})}
+          placeholder="Anotações gerais sobre o paciente: restrições, preferências, alertas, etc." />
+      </Field>
+
+      {data.id && (
+        <div className="border-t border-slate-100 pt-3 mt-2 mb-1">
+          <span className="text-sm font-medium text-slate-700 block mb-2">Fichas clínicas</span>
+          {fichasDoCliente.length === 0 ? (
+            <p className="text-xs text-slate-400 italic mb-2">Nenhuma ficha clínica registrada para este cliente ainda.</p>
+          ) : (
+            <div className="space-y-1 mb-2">
+              {fichasDoCliente.map(f => {
+                const cfgF = FICHA_STATUS[f.status];
+                const modelo = (modelosFicha||[]).find(m=>m.id===f.modeloId);
+                const profissional = professionals.find(p=>p.id===f.profissionalId);
+                return (
+                  <div key={f.id} className="flex items-center justify-between text-sm bg-slate-50 border border-slate-200 rounded-lg px-3 py-2">
+                    <span>{fmtDataBR(f.data)} — {modelo?.nome || "Ficha"}{profissional ? ` · ${profissional.nome}` : ""}</span>
+                    {cfgF && <span className={"text-xs font-medium border rounded-full px-2 py-0.5 flex-shrink-0 " + cfgF.badge}>{cfgF.label}</span>}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+          <p className="text-[11px] text-slate-400">Para criar ou editar uma ficha, use a aba Fichas Clínicas.</p>
+        </div>
       )}
 
       <div className="flex justify-end gap-2 mt-4">
