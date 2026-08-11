@@ -1925,6 +1925,15 @@ function AppointmentModal({data, clients, professionals, guias, appointments, un
         <select className={inputCls} value={form.clienteId} onChange={e=>{ setValorEditadoManualmente(false); setForm({...form, clienteId:e.target.value, guiaId:"", vendaId:null, pagamentoVinculado:false, valor:0}); }}>
           {clients.map(c => <option key={c.id} value={c.id}>{c.nome}</option>)}
         </select>
+        {/* RN pedida explicitamente pelo usuário: mostrar o convênio (ou particular/bolsa) do cliente logo
+            ao selecioná-lo, sem precisar abrir o cadastro para saber como ele paga. */}
+        {clienteSelecionado && (
+          <p className="text-[11px] text-slate-500 mt-1">
+            {tipoPagamento==="convenio"
+              ? `📋 Convênio: ${clienteSelecionado.convenio || "—"}${clienteSelecionado.numeroCarteirinha ? ` · carteirinha ${clienteSelecionado.numeroCarteirinha}` : ""}`
+              : tipoPagamento==="bolsa" ? "🎗️ Bolsa (sem cobrança)" : "💳 Particular"}
+          </p>
+        )}
       </Field>
       <Field label="Profissional">
         <select className={inputCls} value={form.profissionalId} onChange={e=>{
