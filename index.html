@@ -555,6 +555,65 @@ function Field({label, children}) {
   );
 }
 const inputCls = "w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500";
+const dateSegCls = "border border-slate-300 rounded-lg py-2 text-sm text-center focus:outline-none focus:ring-2 focus:ring-teal-500";
+
+// Campo de data com avanço automático (RN pedida explicitamente pelo usuário): ao completar os 2 dígitos
+// do dia, o foco pula sozinho para o mês; ao completar os 2 dígitos do mês, pula para o ano. Substitui os
+// <input type="date"> nativos do sistema, mas mantém o mesmo formato de valor (string ISO "AAAA-MM-DD"),
+// então nenhum outro código precisou mudar — só a forma como a data é digitada.
+function DateInput({value, onChange, className}) {
+  const [y, m, d] = (value || "").split("-");
+  const [dia, setDia] = useState(d || "");
+  const [mes, setMes] = useState(m || "");
+  const [ano, setAno] = useState(y || "");
+  const diaRef = useRef(null);
+  const mesRef = useRef(null);
+  const anoRef = useRef(null);
+
+  // Sincroniza os campos quando o valor vem de fora (ex.: limpar formulário, trocar de registro).
+  useEffect(() => {
+    const [yy, mm, dd] = (value || "").split("-");
+    setDia(dd || ""); setMes(mm || ""); setAno(yy || "");
+  }, [value]);
+
+  function emitir(novoDia, novoMes, novoAno){
+    // Só dispara onChange quando a data fica completa (3 segmentos) ou totalmente vazia (usuário limpou
+    // tudo). Em estados intermediários (ex.: dia e mês preenchidos, ano ainda pela metade) NÃO dispara —
+    // isso evita um loop de sincronização: como o `value` é controlado pelo componente pai, se disparássemos
+    // onChange("") a cada tecla intermediária, o pai devolveria value="" e o useEffect acima limparia os
+    // campos já digitados (dia/mês) no meio da digitação do ano.
+    if (novoDia.length===2 && novoMes.length===2 && novoAno.length===4) onChange(`${novoAno}-${novoMes}-${novoDia}`);
+    else if (!novoDia && !novoMes && !novoAno) onChange("");
+  }
+  function handleDia(e){
+    const v = e.target.value.replace(/\D/g,"").slice(0,2);
+    setDia(v); emitir(v, mes, ano);
+    if (v.length===2) mesRef.current?.focus();
+  }
+  function handleMes(e){
+    const v = e.target.value.replace(/\D/g,"").slice(0,2);
+    setMes(v); emitir(dia, v, ano);
+    if (v.length===2) anoRef.current?.focus();
+  }
+  function handleAno(e){
+    const v = e.target.value.replace(/\D/g,"").slice(0,4);
+    setAno(v); emitir(dia, mes, v);
+  }
+  function voltarSeVazio(ref){ return e => { if (e.key==="Backspace" && e.target.value==="") ref.current?.focus(); }; }
+
+  return (
+    <div className={"flex items-center gap-1 " + (className||"")}>
+      <input ref={diaRef} type="text" inputMode="numeric" placeholder="DD" maxLength={2} value={dia}
+        onChange={handleDia} className={dateSegCls + " w-11 px-1"} />
+      <span className="text-slate-400">/</span>
+      <input ref={mesRef} type="text" inputMode="numeric" placeholder="MM" maxLength={2} value={mes}
+        onChange={handleMes} onKeyDown={voltarSeVazio(diaRef)} className={dateSegCls + " w-11 px-1"} />
+      <span className="text-slate-400">/</span>
+      <input ref={anoRef} type="text" inputMode="numeric" placeholder="AAAA" maxLength={4} value={ano}
+        onChange={handleAno} onKeyDown={voltarSeVazio(mesRef)} className={dateSegCls + " w-16 px-1"} />
+    </div>
+  );
+}
 
 function Modal({title, onClose, children, wide}) {
   return (
@@ -1530,7 +1589,7 @@ function Agenda({professionals, clients, appointments, guias, fichas, selectedDa
 
       <div className="flex items-center gap-3 mb-4 flex-wrap">
         <button onClick={()=>shiftDate(visao==="semana"?-7:-1)} className="px-2 py-1.5 rounded-lg border border-slate-300 bg-white hover:bg-slate-50 text-sm">←</button>
-        <input type="date" value={selectedDate} onChange={e=>setSelectedDate(e.target.value)} className="border border-slate-300 rounded-lg px-3 py-1.5 text-sm bg-white" />
+        <DateInput value={selectedDate} onChange={setSelectedDate} />
         <button onClick={()=>shiftDate(visao==="semana"?7:1)} className="px-2 py-1.5 rounded-lg border border-slate-300 bg-white hover:bg-slate-50 text-sm">→</button>
         {visao==="dia" ? (
           <>
@@ -1786,7 +1845,7 @@ function AppointmentModal({data, clients, professionals, guias, appointments, un
         </Field>
       </div>
       <div className="grid grid-cols-3 gap-3">
-        <Field label="Data"><input type="date" className={inputCls} value={form.data} onChange={e=>setForm({...form, data:e.target.value})} /></Field>
+        <Field label="Data"><DateInput value={form.data} onChange={v=>setForm({...form, data:v})} /></Field>
         <Field label="Hora"><input type="time" className={inputCls} value={form.hora} onChange={e=>setForm({...form, hora:e.target.value})} /></Field>
         <Field label="Duração (min)"><input type="number" min="10" step="5" className={inputCls} value={form.duracaoMin||50} onChange={e=>setForm({...form, duracaoMin:Number(e.target.value)})} /></Field>
       </div>
@@ -2123,7 +2182,7 @@ function ClientModal({data, professionals, convenios, produtos, currentUser, onC
         <Field label="Telefone"><input className={inputCls} value={form.telefone} onChange={e=>setForm({...form,telefone:e.target.value})} /></Field>
         <Field label="E-mail"><input type="email" className={inputCls} value={form.email||""} onChange={e=>setForm({...form,email:e.target.value})} /></Field>
         <Field label="Endereço"><input className={inputCls} value={form.endereco} onChange={e=>setForm({...form,endereco:e.target.value})} /></Field>
-        <Field label="Data de nascimento"><input type="date" className={inputCls} value={form.dataNascimento} onChange={e=>setForm({...form,dataNascimento:e.target.value})} /></Field>
+        <Field label="Data de nascimento"><DateInput value={form.dataNascimento} onChange={v=>setForm({...form,dataNascimento:v})} /></Field>
         <Field label="CPF"><input className={inputCls} value={form.cpf} onChange={e=>setForm({...form,cpf:e.target.value})} /></Field>
         <Field label="Nº carteirinha/matrícula (convênio)"><input className={inputCls} value={form.numeroCarteirinha||""} onChange={e=>setForm({...form,numeroCarteirinha:e.target.value})} placeholder="Necessário para faturamento TISS" /></Field>
         <Field label="Convênio médico">
@@ -2153,7 +2212,7 @@ function ClientModal({data, professionals, convenios, produtos, currentUser, onC
         <Field label="Nome do pacote"><input className={inputCls} value={form.pacoteNome} onChange={e=>setForm({...form,pacoteNome:e.target.value})} /></Field>
         <Field label="Total de sessões do pacote"><input type="number" className={inputCls} value={form.sessoesTotal} onChange={e=>setForm({...form,sessoesTotal:Number(e.target.value)})} /></Field>
         <Field label="Valor por sessão (R$)"><input type="number" className={inputCls} value={form.valorSessao} onChange={e=>setForm({...form,valorSessao:Number(e.target.value)})} /></Field>
-        <Field label="Data de início"><input type="date" className={inputCls} value={form.dataInicio} onChange={e=>setForm({...form,dataInicio:e.target.value})} /></Field>
+        <Field label="Data de início"><DateInput value={form.dataInicio} onChange={v=>setForm({...form,dataInicio:v})} /></Field>
       </div>
 
       <div className="border-t border-slate-100 pt-3 mt-1 mb-3">
@@ -2263,8 +2322,8 @@ function ClientModal({data, professionals, convenios, produtos, currentUser, onC
                 }} />
               </Field>
               <Field label="Término (opcional)">
-                <input type="date" className={inputCls} value={hf.dataTermino||""} onChange={e=>{
-                  const atualizados = form.horariosFixos.map((h,i)=> i===idx ? {...h, dataTermino:e.target.value||null} : h);
+                <DateInput value={hf.dataTermino||""} onChange={v=>{
+                  const atualizados = form.horariosFixos.map((h,i)=> i===idx ? {...h, dataTermino:v||null} : h);
                   setForm({...form, horariosFixos:atualizados});
                 }} />
               </Field>
@@ -2358,7 +2417,7 @@ function ClientProfileModal({cliente, clients, appointments, professionals, guia
                   {professionals.map(p => <option key={p.id} value={p.id}>{p.nome}</option>)}
                 </select>
               </Field>
-              <Field label="Data"><input type="date" className={inputCls} value={altaForm.data} onChange={e=>setAltaForm({...altaForm, data:e.target.value})} /></Field>
+              <Field label="Data"><DateInput value={altaForm.data} onChange={v=>setAltaForm({...altaForm, data:v})} /></Field>
               <Field label="Motivo/observações"><input className={inputCls} value={altaForm.motivo} onChange={e=>setAltaForm({...altaForm, motivo:e.target.value})} placeholder="Ex.: tratamento concluído" /></Field>
               <button onClick={()=>onRegistrarAlta(atual.id, altaForm.profissionalId, altaForm.data, altaForm.motivo)} className="mb-3 px-4 py-2 text-sm rounded-lg bg-teal-600 text-white hover:bg-teal-700">Dar alta</button>
             </div>
@@ -2818,8 +2877,8 @@ function ProfessionalModal({data, unidades, onClose, onSave, currentUser}) {
       <div className="grid grid-cols-2 gap-3">
         <Field label="CPF"><input className={inputCls} value={form.cpf||""} onChange={e=>setForm({...form,cpf:e.target.value})} /></Field>
         <Field label="RG"><input className={inputCls} value={form.rg||""} onChange={e=>setForm({...form,rg:e.target.value})} /></Field>
-        <Field label="Data de nascimento"><input type="date" className={inputCls} value={form.dataNascimento||""} onChange={e=>setForm({...form,dataNascimento:e.target.value})} /></Field>
-        <Field label="Data de admissão/início"><input type="date" className={inputCls} value={form.dataAdmissao||""} onChange={e=>setForm({...form,dataAdmissao:e.target.value})} /></Field>
+        <Field label="Data de nascimento"><DateInput value={form.dataNascimento||""} onChange={v=>setForm({...form,dataNascimento:v})} /></Field>
+        <Field label="Data de admissão/início"><DateInput value={form.dataAdmissao||""} onChange={v=>setForm({...form,dataAdmissao:v})} /></Field>
         <Field label="Telefone pessoal"><input className={inputCls} value={form.telefonePessoal||""} onChange={e=>setForm({...form,telefonePessoal:e.target.value})} /></Field>
         <Field label="E-mail"><input type="email" className={inputCls} value={form.email||""} onChange={e=>setForm({...form,email:e.target.value})} /></Field>
       </div>
@@ -4116,7 +4175,7 @@ function GuiaModal({data, clients, professionals, unidades, procedimentosTuss, o
         </Field>
         <Field label="Número da guia"><input className={inputCls} value={form.numeroGuia} onChange={e=>setForm({...form,numeroGuia:e.target.value})} /></Field>
         <Field label="Senha"><input className={inputCls} value={form.senha} onChange={e=>setForm({...form,senha:e.target.value})} /></Field>
-        <Field label="Validade"><input type="date" className={inputCls} value={form.validade} onChange={e=>setForm({...form,validade:e.target.value})} /></Field>
+        <Field label="Validade"><DateInput value={form.validade} onChange={v=>setForm({...form,validade:v})} /></Field>
         <Field label="Especialidade(s)"><input className={inputCls} value={form.especialidades} onChange={e=>setForm({...form,especialidades:e.target.value})} placeholder="Ex.: RPG, Pilates Clínico" /></Field>
         <Field label="Quantidade de sessões autorizadas"><input type="number" min="1" className={inputCls} value={form.quantidadeAutorizada} onChange={e=>setForm({...form,quantidadeAutorizada:Number(e.target.value)})} /></Field>
         <Field label="Sessões já utilizadas"><input type="number" min="0" className={inputCls} value={form.quantidadeUtilizada} onChange={e=>setForm({...form,quantidadeUtilizada:Number(e.target.value)})} /></Field>
@@ -4125,15 +4184,15 @@ function GuiaModal({data, clients, professionals, unidades, procedimentosTuss, o
             {Object.entries(STATUS_GUIA).map(([k,v]) => <option key={k} value={k}>{v.label}</option>)}
           </select>
         </Field>
-        <Field label="Data de envio (faturamento)"><input type="date" className={inputCls} value={form.dataEnvio||""} onChange={e=>setForm({...form,dataEnvio:e.target.value||null})} /></Field>
-        <Field label="Data de pagamento"><input type="date" className={inputCls} value={form.dataPagamento||""} onChange={e=>setForm({...form,dataPagamento:e.target.value||null})} /></Field>
+        <Field label="Data de envio (faturamento)"><DateInput value={form.dataEnvio||""} onChange={v=>setForm({...form,dataEnvio:v||null})} /></Field>
+        <Field label="Data de pagamento"><DateInput value={form.dataPagamento||""} onChange={v=>setForm({...form,dataPagamento:v||null})} /></Field>
       </div>
 
       <div className="border-t border-slate-100 pt-3 mt-1 mb-3">
         <span className="text-sm font-medium text-slate-700 mb-2 block">Dados para faturamento TISS (Guia SP/SADT)</span>
         <div className="grid grid-cols-2 gap-x-4">
           <Field label="CID (diagnóstico)"><input className={inputCls} value={form.cid||""} onChange={e=>setForm({...form,cid:e.target.value})} placeholder="Ex.: M54.5" /></Field>
-          <Field label="Data de autorização"><input type="date" className={inputCls} value={form.dataAutorizacao||""} onChange={e=>setForm({...form,dataAutorizacao:e.target.value||null})} /></Field>
+          <Field label="Data de autorização"><DateInput value={form.dataAutorizacao||""} onChange={v=>setForm({...form,dataAutorizacao:v||null})} /></Field>
           <Field label="Unidade prestadora">
             <select className={inputCls} value={form.unidadePrestadoraId||""} onChange={e=>setForm({...form,unidadePrestadoraId:e.target.value})}>
               <option value="">Selecione...</option>
@@ -4146,8 +4205,8 @@ function GuiaModal({data, clients, professionals, unidades, procedimentosTuss, o
               {(procedimentosTuss||[]).map(p => <option key={p.id} value={p.id}>{p.nome} — {p.codigoTUSS}</option>)}
             </select>
           </Field>
-          <Field label="Documentação completa em"><input type="date" className={inputCls} value={form.documentacaoCompletaEm||""} onChange={e=>setForm({...form,documentacaoCompletaEm:e.target.value||null})} /></Field>
-          <Field label="Novo pedido médico recebido em"><input type="date" className={inputCls} value={form.novoPedidoRecebidoEm||""} onChange={e=>setForm({...form,novoPedidoRecebidoEm:e.target.value||null})} /></Field>
+          <Field label="Documentação completa em"><DateInput value={form.documentacaoCompletaEm||""} onChange={v=>setForm({...form,documentacaoCompletaEm:v||null})} /></Field>
+          <Field label="Novo pedido médico recebido em"><DateInput value={form.novoPedidoRecebidoEm||""} onChange={v=>setForm({...form,novoPedidoRecebidoEm:v||null})} /></Field>
         </div>
       </div>
 
@@ -4803,7 +4862,7 @@ function CaixaPanel({lancamentos, fechamentos, onNew, onFechar, onReabrir}) {
     <div>
       <div className="flex items-center gap-3 mb-4 flex-wrap">
         <button onClick={()=>shiftDate(-1)} className="px-2 py-1.5 rounded-lg border border-slate-300 bg-white hover:bg-slate-50 text-sm">←</button>
-        <input type="date" value={data} onChange={e=>setData(e.target.value)} className="border border-slate-300 rounded-lg px-3 py-1.5 text-sm bg-white" />
+        <DateInput value={data} onChange={setData} />
         <button onClick={()=>shiftDate(1)} className="px-2 py-1.5 rounded-lg border border-slate-300 bg-white hover:bg-slate-50 text-sm">→</button>
         {fechado ? (
           <span className="text-xs font-medium px-2 py-1 rounded-full bg-slate-200 text-slate-600">🔒 Caixa fechado</span>
@@ -4906,7 +4965,7 @@ function LancamentoModal({data, unidades, onClose, onSave}) {
   const ehReceita = form.tipo === "receita";
   return (
     <Modal title="Novo lançamento de caixa" onClose={onClose}>
-      <Field label="Data"><input type="date" className={inputCls} value={form.data} onChange={e=>setForm({...form,data:e.target.value})} /></Field>
+      <Field label="Data"><DateInput value={form.data} onChange={v=>setForm({...form,data:v})} /></Field>
       <Field label="Unidade">
         <select className={inputCls} value={form.unidadeId||""} onChange={e=>setForm({...form,unidadeId:e.target.value})}>
           {(unidades||[]).map(u => <option key={u.id} value={u.id}>{u.nome}</option>)}
@@ -5219,7 +5278,7 @@ function FichaModal({data, clients, professionals, modelosFicha, onClose, onSave
             {professionals.map(p => <option key={p.id} value={p.id}>{p.nome}</option>)}
           </select>
         </Field>
-        <Field label="Data"><input type="date" className={inputCls} value={form.data} onChange={e=>setForm({...form,data:e.target.value})} /></Field>
+        <Field label="Data"><DateInput value={form.data} onChange={v=>setForm({...form,data:v})} /></Field>
       </div>
       <Field label="Modo de preenchimento">
         <div className="flex gap-2">
