@@ -618,6 +618,46 @@ function DateInput({value, onChange, className}) {
   );
 }
 
+// Campo de valor monetário com suporte a vírgula decimal (RN pedida explicitamente pelo usuário: "ao digitar
+// os valores ter a opção de inserir casa decimal"). O <input type="number"> nativo só aceita ponto como
+// separador decimal — em teclado numérico de celular/computador configurado em pt-BR, a tecla de decimal
+// digita vírgula, que o navegador rejeita silenciosamente (parece que "não dá pra digitar decimal"). Substitui
+// esses campos por um <input type="text"> que aceita vírgula (ou ponto) e sempre emite um número JS por
+// onChange — nenhum outro código muda, só a forma como o valor é digitado.
+function MoneyInput({value, onChange, className, placeholder, allowEmpty}) {
+  const formatar = v => (v===null || v===undefined || v==="") ? "" : String(v).replace(".", ",");
+  const [texto, setTexto] = useState(() => formatar(value));
+  // Guarda o último valor que O PRÓPRIO componente emitiu via onChange. Se o `value` que chega de fora for
+  // igual a esse último valor emitido, é só o eco do nosso próprio onChange (o pai re-renderizou com o que
+  // acabamos de mandar) — não mexe no texto. Só resincroniza quando `value` muda por outro motivo (troca de
+  // cliente/registro, limpar formulário) — evita o mesmo tipo de loop de sincronização já corrigido no DateInput.
+  const ultimoEmitido = useRef(value);
+
+  useEffect(() => {
+    if (value === ultimoEmitido.current) return;
+    ultimoEmitido.current = value;
+    setTexto(formatar(value));
+  }, [value]);
+
+  function handleChange(e){
+    let v = e.target.value.replace(/[^\d,]/g, "");
+    const partes = v.split(",");
+    if (partes.length > 2) v = partes[0] + "," + partes.slice(1).join(""); // só permite uma vírgula
+    setTexto(v);
+    let emitido;
+    if (v === "" || v === ",") {
+      emitido = allowEmpty ? "" : 0;
+    } else {
+      const n = Number(v.replace(",", "."));
+      emitido = isNaN(n) ? (allowEmpty ? "" : 0) : n;
+    }
+    ultimoEmitido.current = emitido;
+    onChange(emitido);
+  }
+
+  return <input type="text" inputMode="decimal" className={className} value={texto} onChange={handleChange} placeholder={placeholder||"0,00"} />;
+}
+
 function Modal({title, onClose, children, wide}) {
   return (
     <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
@@ -1920,8 +1960,8 @@ function AppointmentModal({data, clients, professionals, guias, appointments, un
 
       {!ehAvaliacao && (tipoPagamento === "particular" || tipoPagamento === "convenio") && (
         <Field label={`Valor da sessão (R$)${tipoPagamento==="convenio" ? " — sugerido pela tabela do convênio" : ""}`}>
-          <input type="number" min="0" step="0.01" className={inputCls} value={form.valor ?? 0}
-            onChange={e=>{ setValorEditadoManualmente(true); setForm({...form, valor:Number(e.target.value)}); }} />
+          <MoneyInput className={inputCls} value={form.valor ?? 0}
+            onChange={v=>{ setValorEditadoManualmente(true); setForm({...form, valor:v}); }} />
           {valorSugerido>0 && Number(form.valor||0)!==valorSugerido && (
             <button type="button" onClick={()=>{ setValorEditadoManualmente(false); setForm({...form, valor:valorSugerido}); }}
               className="text-[11px] text-teal-600 hover:underline mt-1">Usar valor sugerido: {fmtBRL(valorSugerido)}</button>
@@ -2242,7 +2282,7 @@ function ClientModal({data, professionals, convenios, produtos, currentUser, onC
         <Field label="Tratamento"><input className={inputCls} value={form.tratamento} onChange={e=>setForm({...form,tratamento:e.target.value})} /></Field>
         <Field label="Nome do pacote"><input className={inputCls} value={form.pacoteNome} onChange={e=>setForm({...form,pacoteNome:e.target.value})} /></Field>
         <Field label="Total de sessões do pacote"><input type="number" className={inputCls} value={form.sessoesTotal} onChange={e=>setForm({...form,sessoesTotal:Number(e.target.value)})} /></Field>
-        <Field label="Valor por sessão (R$)"><input type="number" className={inputCls} value={form.valorSessao} onChange={e=>setForm({...form,valorSessao:Number(e.target.value)})} /></Field>
+        <Field label="Valor por sessão (R$)"><MoneyInput className={inputCls} value={form.valorSessao} onChange={v=>setForm({...form,valorSessao:v})} /></Field>
         <Field label="Data de início"><DateInput value={form.dataInicio} onChange={v=>setForm({...form,dataInicio:v})} /></Field>
       </div>
 
@@ -2997,24 +3037,24 @@ function ProfessionalModal({data, unidades, onClose, onSave, currentUser}) {
       </Field>
       {form.comissaoTipo === "salario" ? (
         <div className="grid grid-cols-2 gap-3">
-          <Field label="Salário fixo mensal (R$)"><input type="number" min="0" className={inputCls} value={form.salarioFixoMensal??0} onChange={e=>setForm({...form,salarioFixoMensal:Number(e.target.value)})} /></Field>
-          <Field label="Bônus mensal (R$)"><input type="number" min="0" className={inputCls} value={form.bonusMensal??0} onChange={e=>setForm({...form,bonusMensal:Number(e.target.value)})} placeholder="Meta/desempenho, opcional" /></Field>
+          <Field label="Salário fixo mensal (R$)"><MoneyInput className={inputCls} value={form.salarioFixoMensal??0} onChange={v=>setForm({...form,salarioFixoMensal:v})} /></Field>
+          <Field label="Bônus mensal (R$)"><MoneyInput className={inputCls} value={form.bonusMensal??0} onChange={v=>setForm({...form,bonusMensal:v})} placeholder="Meta/desempenho, opcional" /></Field>
         </div>
       ) : (
         <div className="grid grid-cols-2 gap-3">
           {form.comissaoTipo === "fixo" ? (
-            <Field label="Valor fixo por sessão (R$)"><input type="number" min="0" className={inputCls} value={form.comissaoValorSessao??0} onChange={e=>setForm({...form,comissaoValorSessao:Number(e.target.value)})} /></Field>
+            <Field label="Valor fixo por sessão (R$)"><MoneyInput className={inputCls} value={form.comissaoValorSessao??0} onChange={v=>setForm({...form,comissaoValorSessao:v})} /></Field>
           ) : (
             <Field label="Comissão (%)"><input type="number" min="0" max="100" className={inputCls} value={form.comissaoPercentual??0} onChange={e=>setForm({...form,comissaoPercentual:Number(e.target.value)})} /></Field>
           )}
-          <Field label="Custo fixo mensal (R$)"><input type="number" min="0" className={inputCls} value={form.custoFixoMensal??0} onChange={e=>setForm({...form,custoFixoMensal:Number(e.target.value)})} placeholder="Sala, equipamento, etc." /></Field>
+          <Field label="Custo fixo mensal (R$)"><MoneyInput className={inputCls} value={form.custoFixoMensal??0} onChange={v=>setForm({...form,custoFixoMensal:v})} placeholder="Sala, equipamento, etc." /></Field>
         </div>
       )}
 
       <div className="border-t border-slate-100 pt-3 mt-2 mb-1"><span className="text-sm font-medium text-slate-700">Ponto eletrônico &amp; benefícios</span></div>
       <div className="grid grid-cols-3 gap-3">
-        <Field label="Vale-transporte por dia (R$)"><input type="number" min="0" step="0.01" className={inputCls} value={form.valorValeTransporteDia??0} onChange={e=>setForm({...form,valorValeTransporteDia:Number(e.target.value)})} /></Field>
-        <Field label="Vale-alimentação por dia (R$)"><input type="number" min="0" step="0.01" className={inputCls} value={form.valorValeAlimentacaoDia??0} onChange={e=>setForm({...form,valorValeAlimentacaoDia:Number(e.target.value)})} /></Field>
+        <Field label="Vale-transporte por dia (R$)"><MoneyInput className={inputCls} value={form.valorValeTransporteDia??0} onChange={v=>setForm({...form,valorValeTransporteDia:v})} /></Field>
+        <Field label="Vale-alimentação por dia (R$)"><MoneyInput className={inputCls} value={form.valorValeAlimentacaoDia??0} onChange={v=>setForm({...form,valorValeAlimentacaoDia:v})} /></Field>
         <Field label="Biometria (ponto eletrônico)">
           {form.biometriaCadastrada ? (
             <div className="flex items-center gap-2 h-[38px]">
@@ -3773,7 +3813,7 @@ function ProdutoModal({data, onClose, onSave}) {
           placeholder="Ex.: Pilates, RPG, Fisioterapia Geral — usado para sugerir este produto na agenda" />
       </Field>
       <div className="grid grid-cols-2 gap-3">
-        <Field label="Preço base (R$)"><input type="number" min="0" step="0.01" className={inputCls} value={form.precoBase} onChange={e=>setForm({...form,precoBase:Number(e.target.value)})} /></Field>
+        <Field label="Preço base (R$)"><MoneyInput className={inputCls} value={form.precoBase} onChange={v=>setForm({...form,precoBase:v})} /></Field>
         <Field label="Sessões incluídas"><input type="number" min="0" className={inputCls} value={form.sessoesIncluidas} onChange={e=>setForm({...form,sessoesIncluidas:Number(e.target.value)})} /></Field>
       </div>
       <div className="grid grid-cols-3 gap-3">
@@ -4299,7 +4339,7 @@ function ProcedimentoTussModal({data, convenios, onClose, onSave}) {
       <Field label="Nome do procedimento (nome usado hoje na clínica)"><input className={inputCls} value={form.nome} onChange={e=>setForm({...form,nome:e.target.value})} /></Field>
       <div className="grid grid-cols-2 gap-3">
         <Field label="Código TUSS"><input className={inputCls} value={form.codigoTUSS} onChange={e=>setForm({...form,codigoTUSS:e.target.value})} /></Field>
-        <Field label="Valor padrão (R$) — usado quando não há preço específico do convênio"><input type="number" min="0" step="0.01" className={inputCls} value={form.valorPadrao||0} onChange={e=>setForm({...form,valorPadrao:Number(e.target.value)})} /></Field>
+        <Field label="Valor padrão (R$) — usado quando não há preço específico do convênio"><MoneyInput className={inputCls} value={form.valorPadrao||0} onChange={v=>setForm({...form,valorPadrao:v})} /></Field>
       </div>
       <label className="flex items-center gap-2 text-sm text-slate-700 mb-3">
         <input type="checkbox" checked={!!form.ativo} onChange={e=>setForm({...form,ativo:e.target.checked})} /> Procedimento ativo
@@ -4311,10 +4351,10 @@ function ProcedimentoTussModal({data, convenios, onClose, onSave}) {
           {(convenios||[]).filter(c=>c.ativo).map(c => (
             <label key={c.id} className="flex items-center justify-between gap-2 text-xs bg-slate-50 rounded-lg px-2 py-1.5">
               <span className="text-slate-600 truncate">{c.nome}</span>
-              <input type="number" min="0" step="0.01" placeholder={String(form.valorPadrao||0)}
+              <MoneyInput allowEmpty placeholder={String(form.valorPadrao||0)}
                 className="w-20 border border-slate-300 rounded px-1.5 py-1 text-right text-xs"
                 value={form.precosPorConvenio && form.precosPorConvenio[c.id] != null ? form.precosPorConvenio[c.id] : ""}
-                onChange={e=>setPreco(c.id, e.target.value)} />
+                onChange={v=>setPreco(c.id, v)} />
             </label>
           ))}
         </div>
@@ -4752,7 +4792,7 @@ function GlosaModal({guia, onClose, onSave}) {
           <option value="glosada_total">Glosa total</option>
         </select>
       </Field>
-      <Field label="Valor glosado (R$)"><input type="number" className={inputCls} value={valor} onChange={e=>setValor(Number(e.target.value))} /></Field>
+      <Field label="Valor glosado (R$)"><MoneyInput className={inputCls} value={valor} onChange={setValor} /></Field>
       <Field label="Motivo"><textarea className={inputCls} rows="2" value={motivo} onChange={e=>setMotivo(e.target.value)} placeholder="Ex.: Guia vencida, divergência de CBO..." /></Field>
       <div className="flex justify-end gap-2 mt-4">
         <button onClick={onClose} className="px-4 py-2 text-sm rounded-lg border border-slate-300">Cancelar</button>
@@ -4970,7 +5010,7 @@ function CaixaPanel({lancamentos, fechamentos, onNew, onFechar, onReabrir}) {
             <p className="text-xs text-slate-500 mb-2">Valor esperado em dinheiro pelo sistema: <strong>{fmtBRL(calc.valorSistemaDinheiro)}</strong> (dinheiro recebido + reforços − despesas em dinheiro − sangrias).</p>
             <div className="flex items-end gap-3 flex-wrap">
               <Field label="Valor físico contado na gaveta (R$)">
-                <input type="number" className={inputCls} value={valorContado} onChange={e=>setValorContado(e.target.value)} />
+                <MoneyInput allowEmpty className={inputCls} value={valorContado} onChange={setValorContado} />
               </Field>
               <button
                 onClick={()=>{ onFechar(data, Number(valorContado||0), calc.valorSistemaDinheiro); setValorContado(""); }}
@@ -5025,7 +5065,7 @@ function LancamentoModal({data, unidades, onClose, onSave}) {
           </select>
         </Field>
       )}
-      <Field label="Valor (R$)"><input type="number" min="0" className={inputCls} value={form.valor} onChange={e=>setForm({...form,valor:Number(e.target.value)})} /></Field>
+      <Field label="Valor (R$)"><MoneyInput className={inputCls} value={form.valor} onChange={v=>setForm({...form,valor:v})} /></Field>
       <Field label="Descrição"><input className={inputCls} value={form.descricao} onChange={e=>setForm({...form,descricao:e.target.value})} /></Field>
       <div className="flex justify-end gap-2 mt-4">
         <button onClick={onClose} className="px-4 py-2 text-sm rounded-lg border border-slate-300">Cancelar</button>
