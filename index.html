@@ -300,13 +300,13 @@ const conveniosIniciais = [
 
 const CATEGORIAS_PRODUTO = ["Avaliação","Pacote de sessões","Sessão avulsa","Produto"];
 const produtosIniciais = [
-  { id:"pr1", nome:"Avaliação inicial", categoria:"Avaliação", descricao:"Avaliação fisioterapêutica completa com anamnese.", especialidade:"", precoBase:150, sessoesIncluidas:1, descontoMaximoPercent:0, parcelasMaximas:1, ativo:true },
-  { id:"pr2", nome:"Pacote RPG 10 sessões", categoria:"Pacote de sessões", descricao:"Reeducação postural global - pacote fechado.", especialidade:"RPG", precoBase:1200, sessoesIncluidas:10, descontoMaximoPercent:10, parcelasMaximas:3, ativo:true },
-  { id:"pr3", nome:"Pacote Pilates mensal (8 sessões)", categoria:"Pacote de sessões", descricao:"Pilates clínico - plano mensal recorrente.", especialidade:"Pilates", precoBase:880, sessoesIncluidas:8, descontoMaximoPercent:15, parcelasMaximas:2, ativo:true },
-  { id:"pr4", nome:"Pacote reabilitação 20 sessões", categoria:"Pacote de sessões", descricao:"Reabilitação ortopédica pós-cirúrgica.", especialidade:"Fisioterapia Ortopédica", precoBase:2800, sessoesIncluidas:20, descontoMaximoPercent:12, parcelasMaximas:4, ativo:true },
-  { id:"pr5", nome:"Sessão avulsa", categoria:"Sessão avulsa", descricao:"Sessão individual sem vínculo a pacote.", especialidade:"", precoBase:130, sessoesIncluidas:1, descontoMaximoPercent:5, parcelasMaximas:1, ativo:true },
-  { id:"pr6", nome:"Munhequeira ortopédica", categoria:"Produto", descricao:"Órtese para punho.", especialidade:"", precoBase:89, sessoesIncluidas:0, descontoMaximoPercent:20, parcelasMaximas:2, ativo:true },
-  { id:"pr7", nome:"Faixa elástica terapêutica (kit)", categoria:"Produto", descricao:"Kit de faixas para exercícios domiciliares.", especialidade:"", precoBase:65, sessoesIncluidas:0, descontoMaximoPercent:15, parcelasMaximas:1, ativo:true },
+  { id:"pr1", nome:"Avaliação inicial", categoria:"Avaliação", descricao:"Avaliação fisioterapêutica completa com anamnese.", especialidade:"", precoBase:150, sessoesIncluidas:1, descontoMinimoPercent:0, descontoMaximoPercent:0, parcelasMaximas:1, ativo:true },
+  { id:"pr2", nome:"Pacote RPG 10 sessões", categoria:"Pacote de sessões", descricao:"Reeducação postural global - pacote fechado.", especialidade:"RPG", precoBase:1200, sessoesIncluidas:10, descontoMinimoPercent:0, descontoMaximoPercent:10, parcelasMaximas:3, ativo:true },
+  { id:"pr3", nome:"Pacote Pilates mensal (8 sessões)", categoria:"Pacote de sessões", descricao:"Pilates clínico - plano mensal recorrente.", especialidade:"Pilates", precoBase:880, sessoesIncluidas:8, descontoMinimoPercent:0, descontoMaximoPercent:15, parcelasMaximas:2, ativo:true },
+  { id:"pr4", nome:"Pacote reabilitação 20 sessões", categoria:"Pacote de sessões", descricao:"Reabilitação ortopédica pós-cirúrgica.", especialidade:"Fisioterapia Ortopédica", precoBase:2800, sessoesIncluidas:20, descontoMinimoPercent:0, descontoMaximoPercent:12, parcelasMaximas:4, ativo:true },
+  { id:"pr5", nome:"Sessão avulsa", categoria:"Sessão avulsa", descricao:"Sessão individual sem vínculo a pacote.", especialidade:"", precoBase:130, sessoesIncluidas:1, descontoMinimoPercent:0, descontoMaximoPercent:5, parcelasMaximas:1, ativo:true },
+  { id:"pr6", nome:"Munhequeira ortopédica", categoria:"Produto", descricao:"Órtese para punho.", especialidade:"", precoBase:89, sessoesIncluidas:0, descontoMinimoPercent:0, descontoMaximoPercent:20, parcelasMaximas:2, ativo:true },
+  { id:"pr7", nome:"Faixa elástica terapêutica (kit)", categoria:"Produto", descricao:"Kit de faixas para exercícios domiciliares.", especialidade:"", precoBase:65, sessoesIncluidas:0, descontoMinimoPercent:0, descontoMaximoPercent:15, parcelasMaximas:1, ativo:true },
 ];
 
 const LIMITE_ALERTA_VALIDADE_DIAS = 15;
@@ -850,7 +850,13 @@ function App({currentUser, onLogout}) {
   /* ---- Fluxo de caixa ---- */
   function addLancamento(form){
     if (fechamentos[form.data]) { alert("O caixa deste dia já está fechado. Reabra o caixa para lançar novos itens."); return; }
-    setLancamentos(list => [...list, {...form, id:"l"+Date.now()}]);
+    // `_overrideDesconto` é um campo transiente vindo do VenderProdutoModal (venda avulsa na Agenda) —
+    // só serve para registrar a autorização de desconto fora da faixa no log; não é salvo no lançamento.
+    const { _overrideDesconto, ...lancamento } = form;
+    if (_overrideDesconto) {
+      pushLog("Override", `Desconto de ${_overrideDesconto.desconto}% em "${_overrideDesconto.produtoNome}" está fora da faixa permitida (${_overrideDesconto.min}%–${_overrideDesconto.max}%) — autorizado pelo gestor na venda avulsa (Agenda).`);
+    }
+    setLancamentos(list => [...list, {...lancamento, id:"l"+Date.now()}]);
     setModal(null);
   }
 
@@ -1007,11 +1013,21 @@ function App({currentUser, onLogout}) {
       const exists = list.some(c=>c.id===clienteId);
       return exists ? list.map(c=>c.id===clienteId?clienteFinal:c) : [...list, clienteFinal];
     });
+    // Desconto mín./máx. (RN pedida pelo usuário): a UI (ClientModal) já bloqueia o Salvar até o gestor
+    // autorizar por senha um desconto fora da faixa cadastrada no produto — aqui só registramos a
+    // ocorrência no log de auditoria (canal "Override"), sem re-clampar o valor (a autorização já validou).
+    const produtoVinculado = clienteFinal.produtoId ? produtos.find(p=>p.id===clienteFinal.produtoId) : null;
+    if (produtoVinculado) {
+      const descAplicado = Number(clienteFinal.descontoAplicado)||0;
+      const min = produtoVinculado.descontoMinimoPercent||0, max = produtoVinculado.descontoMaximoPercent||0;
+      if (descAplicado > max || descAplicado < min) {
+        pushLog("Override", `Desconto de ${descAplicado}% em "${produtoVinculado.nome}" para ${clienteFinal.nome} está fora da faixa permitida (${min}%–${max}%) — autorizado pelo gestor no cadastro do cliente.`);
+      }
+    }
     if (produtoMudou) {
-      const produto = produtos.find(p=>p.id===clienteFinal.produtoId);
+      const produto = produtoVinculado;
       if (produto) {
-        const descontoFrac = Math.min(Number(clienteFinal.descontoAplicado)||0, produto.descontoMaximoPercent||0)/100;
-        const valorFinal = Math.round(produto.precoBase * (1-descontoFrac) * 100) / 100;
+        const valorFinal = Math.round(produto.precoBase * (1 - (Number(clienteFinal.descontoAplicado)||0)/100) * 100) / 100;
         // Vínculo do atendente logado ao seu cadastro de colaborador é feito por nome (mesma convenção
         // já usada em outros pontos do sistema, ex.: agenda por profissional/ponto eletrônico).
         const vendedorProf = professionals.find(p => p.nome === currentUser?.nome);
@@ -1228,7 +1244,7 @@ function App({currentUser, onLogout}) {
             onNovoConvenio={()=>setModal({type:"convenio", data:{id:"", nome:"", registroANS:"", telefone:"", prazoMedioPagamentoDias:0, ativo:true}})}
             onEditarConvenio={(c)=>setModal({type:"convenio", data:c})}
             onToggleConvenioAtivo={(id)=>setConvenios(list=>list.map(c=>c.id===id?{...c,ativo:!c.ativo}:c))}
-            onNovoProduto={()=>setModal({type:"produto", data:{id:"", nome:"", categoria:CATEGORIAS_PRODUTO[0], descricao:"", especialidade:"", precoBase:0, sessoesIncluidas:1, descontoMaximoPercent:0, parcelasMaximas:1, ativo:true}})}
+            onNovoProduto={()=>setModal({type:"produto", data:{id:"", nome:"", categoria:CATEGORIAS_PRODUTO[0], descricao:"", especialidade:"", precoBase:0, sessoesIncluidas:1, descontoMinimoPercent:0, descontoMaximoPercent:0, parcelasMaximas:1, ativo:true}})}
             onEditarProduto={(p)=>setModal({type:"produto", data:p})}
             onToggleProdutoAtivo={(id)=>setProdutos(list=>list.map(p=>p.id===id?{...p,ativo:!p.ativo}:p))}
           />
@@ -1275,7 +1291,7 @@ function App({currentUser, onLogout}) {
           onClose={()=>setModal(null)} onSave={createAppointment} onVincularProduto={vincularProdutoAoCliente} />
       )}
       {modal?.type === "client" && (
-        <ClientModal data={modal.data} professionals={professionals} convenios={convenios} produtos={produtos} onClose={()=>setModal(null)} onSave={saveClient} />
+        <ClientModal data={modal.data} professionals={professionals} convenios={convenios} produtos={produtos} currentUser={currentUser} onClose={()=>setModal(null)} onSave={saveClient} />
       )}
       {modal?.type === "importClientes" && (
         <ImportClientesModal onClose={()=>setModal(null)} onImportar={importarClientesLote} />
@@ -1305,7 +1321,7 @@ function App({currentUser, onLogout}) {
         <LancamentoModal data={modal.data} unidades={unidades} onClose={()=>setModal(null)} onSave={addLancamento} />
       )}
       {modal?.type === "venderProduto" && (
-        <VenderProdutoModal data={modal.data} produtos={produtos} clients={clients} onClose={()=>setModal(null)} onSave={addLancamento} />
+        <VenderProdutoModal data={modal.data} produtos={produtos} clients={clients} currentUser={currentUser} onClose={()=>setModal(null)} onSave={addLancamento} />
       )}
       {modal?.type === "ficha" && (
         <FichaModal data={modal.data} clients={clients} professionals={professionals} modelosFicha={modelosFicha}
@@ -2073,17 +2089,22 @@ function ImportClientesModal({onClose, onImportar}) {
   );
 }
 
-function ClientModal({data, professionals, convenios, produtos, onClose, onSave}) {
+function ClientModal({data, professionals, convenios, produtos, currentUser, onClose, onSave}) {
   const [form, setForm] = useState(data);
   const [modalCadastroBiometria, setModalCadastroBiometria] = useState(false);
+  const [descontoAutorizado, setDescontoAutorizado] = useState(false);
+  const [modalAutorizarDesconto, setModalAutorizarDesconto] = useState(false);
   function toggleProf(id){
     setForm(f => ({...f, profissionaisIds: f.profissionaisIds.includes(id) ? f.profissionaisIds.filter(x=>x!==id) : [...f.profissionaisIds, id]}));
   }
   const convenioSelecionadoId = (convenios||[]).find(c => c.nome === form.convenio)?.id || "";
   const produtoSelecionado = (produtos||[]).find(p => p.id === form.produtoId) || null;
+  const descontoMin = produtoSelecionado ? (produtoSelecionado.descontoMinimoPercent||0) : 0;
   const descontoMax = produtoSelecionado ? produtoSelecionado.descontoMaximoPercent : 100;
   const parcelasMax = produtoSelecionado ? produtoSelecionado.parcelasMaximas : 12;
   const valorFinalProduto = produtoSelecionado ? produtoSelecionado.precoBase * (1 - (Number(form.descontoAplicado)||0)/100) : null;
+  // Desconto fora da faixa mín.–máx. do produto exige autorização do gestor (senha) antes de poder salvar.
+  const descontoForaDaFaixa = !!produtoSelecionado && ((Number(form.descontoAplicado)||0) > descontoMax || (Number(form.descontoAplicado)||0) < descontoMin);
   return (
     <Modal title={data.id ? "Editar cliente" : "Novo cliente"} onClose={onClose} wide>
       <div className="grid grid-cols-2 gap-x-4">
@@ -2133,36 +2154,55 @@ function ClientModal({data, professionals, convenios, produtos, onClose, onSave}
             getLabel={p=>p.nome}
             getSub={p=>fmtBRL(p.precoBase)}
             value={form.produtoId||""}
-            onSelect={p=>setForm({...form,
+            onSelect={p=>{ setForm({...form,
               produtoId:p.id,
               pacoteNome:p.nome,
               sessoesTotal:p.sessoesIncluidas||form.sessoesTotal,
               valorSessao:p.sessoesIncluidas>0 ? Math.round((p.precoBase/p.sessoesIncluidas)*100)/100 : p.precoBase,
               descontoAplicado:0, parcelas:1,
-            })}
-            onClear={()=>setForm({...form, produtoId:null})}
+            }); setDescontoAutorizado(false); }}
+            onClear={()=>{ setForm({...form, produtoId:null}); setDescontoAutorizado(false); }}
           />
         </Field>
         {produtoSelecionado && (
-          <div className="grid grid-cols-3 gap-x-4 bg-slate-50 rounded-lg p-3 mt-2">
-            <Field label={`Desconto aplicado (% — máx. ${descontoMax}%)`}>
-              <input type="number" min="0" max={descontoMax} className={inputCls} value={form.descontoAplicado||0}
-                onChange={e=>{
-                  const v = Math.max(0, Math.min(descontoMax, Number(e.target.value)));
-                  setForm({...form, descontoAplicado:v});
-                }} />
-            </Field>
-            <Field label={`Parcelas (máx. ${parcelasMax}x)`}>
-              <select className={inputCls} value={form.parcelas||1} onChange={e=>setForm({...form, parcelas:Number(e.target.value)})}>
-                {Array.from({length:parcelasMax}, (_,i)=>i+1).map(n => <option key={n} value={n}>{n}x</option>)}
-              </select>
-            </Field>
-            <Field label="Valor final">
-              <div className="px-3 py-2 text-sm font-semibold text-teal-700">{fmtBRL(valorFinalProduto)}</div>
-            </Field>
-          </div>
+          <>
+            <div className="grid grid-cols-3 gap-x-4 bg-slate-50 rounded-lg p-3 mt-2">
+              <Field label={`Desconto aplicado (% — faixa ${descontoMin}%–${descontoMax}%)`}>
+                <input type="number" min="0" className={inputCls} value={form.descontoAplicado||0}
+                  onChange={e=>{
+                    setForm({...form, descontoAplicado:Number(e.target.value)});
+                    setDescontoAutorizado(false);
+                  }} />
+              </Field>
+              <Field label={`Parcelas (máx. ${parcelasMax}x)`}>
+                <select className={inputCls} value={form.parcelas||1} onChange={e=>setForm({...form, parcelas:Number(e.target.value)})}>
+                  {Array.from({length:parcelasMax}, (_,i)=>i+1).map(n => <option key={n} value={n}>{n}x</option>)}
+                </select>
+              </Field>
+              <Field label="Valor final">
+                <div className="px-3 py-2 text-sm font-semibold text-teal-700">{fmtBRL(valorFinalProduto)}</div>
+              </Field>
+            </div>
+            {descontoForaDaFaixa && (
+              <div className={"flex items-center justify-between gap-3 rounded-lg p-3 mt-2 text-xs " + (descontoAutorizado ? "bg-green-50 border border-green-200 text-green-700" : "bg-amber-50 border border-amber-200 text-amber-700")}>
+                {descontoAutorizado ? (
+                  <span>✓ Desconto fora da faixa autorizado pelo gestor. Pode salvar.</span>
+                ) : (
+                  <>
+                    <span>Desconto fora da faixa permitida ({descontoMin}%–{descontoMax}%) para este produto. É necessária autorização do gestor para salvar.</span>
+                    <button type="button" onClick={()=>setModalAutorizarDesconto(true)} className="px-3 py-1.5 rounded-lg bg-amber-600 text-white hover:bg-amber-700 flex-shrink-0 whitespace-nowrap">Solicitar autorização</button>
+                  </>
+                )}
+              </div>
+            )}
+          </>
         )}
       </div>
+      {modalAutorizarDesconto && (
+        <AutorizarDescontoModal produtoNome={produtoSelecionado?.nome} descontoSolicitado={Number(form.descontoAplicado)||0} descontoMin={descontoMin} descontoMax={descontoMax} currentUser={currentUser}
+          onClose={()=>setModalAutorizarDesconto(false)}
+          onAutorizado={()=>{ setDescontoAutorizado(true); setModalAutorizarDesconto(false); }} />
+      )}
 
       <Field label="Profissionais que atendem">
         <div className="flex flex-wrap gap-2">
@@ -2255,7 +2295,8 @@ function ClientModal({data, professionals, convenios, produtos, onClose, onSave}
 
       <div className="flex justify-end gap-2 mt-4">
         <button onClick={onClose} className="px-4 py-2 text-sm rounded-lg border border-slate-300">Cancelar</button>
-        <button onClick={()=>onSave(form)} className="px-4 py-2 text-sm rounded-lg bg-teal-600 text-white hover:bg-teal-700">Salvar</button>
+        <button onClick={()=>onSave(form)} disabled={descontoForaDaFaixa && !descontoAutorizado} title={descontoForaDaFaixa && !descontoAutorizado ? "Solicite autorização do gestor para o desconto fora da faixa" : undefined}
+          className="px-4 py-2 text-sm rounded-lg bg-teal-600 text-white hover:bg-teal-700 disabled:opacity-50 disabled:cursor-not-allowed">Salvar</button>
       </div>
     </Modal>
   );
@@ -3467,7 +3508,7 @@ function ProdutosVendas({produtos, onNovo, onEditar, onToggleAtivo}) {
               <th className="text-left px-4 py-2">Descrição</th>
               <th className="text-left px-4 py-2">Preço</th>
               <th className="text-left px-4 py-2">Sessões</th>
-              <th className="text-left px-4 py-2">Desconto máx.</th>
+              <th className="text-left px-4 py-2">Desconto mín.–máx.</th>
               <th className="text-left px-4 py-2">Parcelas máx.</th>
               <th className="text-left px-4 py-2">Status</th>
               <th></th>
@@ -3481,7 +3522,7 @@ function ProdutosVendas({produtos, onNovo, onEditar, onToggleAtivo}) {
                 <td className="px-4 py-2 text-slate-500 max-w-xs truncate" title={p.descricao}>{p.descricao}</td>
                 <td className="px-4 py-2 text-slate-700 font-medium">{fmtBRL(p.precoBase)}</td>
                 <td className="px-4 py-2 text-slate-500">{p.sessoesIncluidas > 0 ? p.sessoesIncluidas : "—"}</td>
-                <td className="px-4 py-2 text-slate-500">{p.descontoMaximoPercent}%</td>
+                <td className="px-4 py-2 text-slate-500">{p.descontoMinimoPercent??0}%–{p.descontoMaximoPercent}%</td>
                 <td className="px-4 py-2 text-slate-500">{p.parcelasMaximas}x</td>
                 <td className="px-4 py-2">
                   <button onClick={()=>onToggleAtivo(p.id)} className={"text-[11px] rounded-full px-2 py-0.5 border " + (p.ativo ? "bg-green-100 text-green-700 border-green-300" : "bg-slate-100 text-slate-500 border-slate-300")}>
@@ -3579,16 +3620,52 @@ function ProdutoModal({data, onClose, onSave}) {
         <Field label="Preço base (R$)"><input type="number" min="0" step="0.01" className={inputCls} value={form.precoBase} onChange={e=>setForm({...form,precoBase:Number(e.target.value)})} /></Field>
         <Field label="Sessões incluídas"><input type="number" min="0" className={inputCls} value={form.sessoesIncluidas} onChange={e=>setForm({...form,sessoesIncluidas:Number(e.target.value)})} /></Field>
       </div>
-      <div className="grid grid-cols-2 gap-3">
+      <div className="grid grid-cols-3 gap-3">
+        <Field label="Desconto mínimo (%)"><input type="number" min="0" max="100" className={inputCls} value={form.descontoMinimoPercent??0} onChange={e=>setForm({...form,descontoMinimoPercent:Number(e.target.value)})} /></Field>
         <Field label="Desconto máximo permitido (%)"><input type="number" min="0" max="100" className={inputCls} value={form.descontoMaximoPercent} onChange={e=>setForm({...form,descontoMaximoPercent:Number(e.target.value)})} /></Field>
         <Field label="Parcelas máximas"><input type="number" min="1" className={inputCls} value={form.parcelasMaximas} onChange={e=>setForm({...form,parcelasMaximas:Number(e.target.value)})} /></Field>
       </div>
+      <p className="text-[11px] text-slate-400 -mt-1 mb-3">Descontos fora dessa faixa (abaixo do mínimo ou acima do máximo) exigem autorização do gestor (senha) no momento da venda/vínculo ao cliente.</p>
       <label className="flex items-center gap-2 text-sm text-slate-700 mb-3">
         <input type="checkbox" checked={!!form.ativo} onChange={e=>setForm({...form,ativo:e.target.checked})} /> Disponível para venda
       </label>
       <div className="flex justify-end gap-2 mt-4">
         <button onClick={onClose} className="px-4 py-2 text-sm rounded-lg border border-slate-300">Cancelar</button>
         <button onClick={()=>onSave(form)} className="px-4 py-2 text-sm rounded-lg bg-teal-600 text-white hover:bg-teal-700">Salvar</button>
+      </div>
+    </Modal>
+  );
+}
+
+// Autorização de desconto fora da faixa (mín.–máx.) cadastrada no produto/pacote — pedida explicitamente
+// pelo usuário: nenhum desconto pode sair da faixa sem a senha do gestor confirmando a liberação.
+// Reaproveitada tanto no vínculo de produto ao cliente (ClientModal) quanto na venda avulsa (VenderProdutoModal).
+function AutorizarDescontoModal({produtoNome, descontoSolicitado, descontoMin, descontoMax, currentUser, onClose, onAutorizado}) {
+  const [senha, setSenha] = useState("");
+  const [erro, setErro] = useState("");
+  const [enviando, setEnviando] = useState(false);
+  async function confirmar(){
+    if (!senha) { setErro("Digite a senha do gestor."); return; }
+    if (!sbClient || !currentUser?.email) { setErro("Sessão inválida."); return; }
+    setEnviando(true); setErro("");
+    const { error } = await sbClient.auth.signInWithPassword({ email: currentUser.email, password: senha });
+    setEnviando(false);
+    if (error) { setErro("Senha do gestor incorreta."); return; }
+    onAutorizado();
+  }
+  return (
+    <Modal title="Autorizar desconto fora da faixa" onClose={onClose}>
+      <p className="text-sm text-slate-700 mb-1">Desconto de <strong>{descontoSolicitado}%</strong> em <strong>{produtoNome || "produto"}</strong></p>
+      <p className="text-sm text-slate-500 mb-4">Fora da faixa permitida ({descontoMin}%–{descontoMax}%) cadastrada no Catálogo. Confirme com a senha do gestor para liberar.</p>
+      <label className="block text-xs font-medium text-slate-600 mb-1">Senha do gestor</label>
+      <input type="password" autoFocus value={senha} onChange={e=>setSenha(e.target.value)} onKeyDown={e=>e.key==="Enter" && confirmar()}
+        className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm mb-1" placeholder="••••••••" />
+      {erro && <p className="text-xs text-red-600 mb-2">{erro}</p>}
+      <div className="flex justify-end gap-2 mt-4">
+        <button onClick={onClose} className="px-4 py-2 text-sm rounded-lg border border-slate-300">Cancelar</button>
+        <button onClick={confirmar} disabled={enviando} className="px-4 py-2 text-sm rounded-lg bg-teal-600 text-white hover:bg-teal-700 disabled:opacity-60">
+          {enviando ? "Verificando..." : "Autorizar desconto"}
+        </button>
       </div>
     </Modal>
   );
@@ -4802,7 +4879,7 @@ function LancamentoModal({data, unidades, onClose, onSave}) {
   );
 }
 
-function VenderProdutoModal({data, produtos, clients, onClose, onSave}) {
+function VenderProdutoModal({data, produtos, clients, currentUser, onClose, onSave}) {
   const cliente = clients.find(c=>c.id===data.clienteId);
   const produtosAtivos = (produtos||[]).filter(p=>p.ativo);
   const [produtoId, setProdutoId] = useState(produtosAtivos[0]?.id || "");
@@ -4810,14 +4887,18 @@ function VenderProdutoModal({data, produtos, clients, onClose, onSave}) {
   const [desconto, setDesconto] = useState(0);
   const [formaPagamento, setFormaPagamento] = useState("dinheiro");
   const [origemPagamento, setOrigemPagamento] = useState(cliente?.pagamento?.tipo === "convenio" ? "convenio" : "particular");
+  const [descontoAutorizado, setDescontoAutorizado] = useState(false);
+  const [modalAutorizarDesconto, setModalAutorizarDesconto] = useState(false);
 
   const produto = produtosAtivos.find(p=>p.id===produtoId);
+  const descontoMin = produto?.descontoMinimoPercent || 0;
   const descontoMax = produto?.descontoMaximoPercent || 0;
   const valorBruto = (produto?.precoBase||0) * quantidade;
-  const valorFinal = valorBruto * (1 - Math.min(desconto, descontoMax)/100);
+  const valorFinal = valorBruto * (1 - (Number(desconto)||0)/100);
+  const descontoForaDaFaixa = !!produto && ((Number(desconto)||0) > descontoMax || (Number(desconto)||0) < descontoMin);
 
   function confirmar(){
-    if (!produto) return;
+    if (!produto || (descontoForaDaFaixa && !descontoAutorizado)) return;
     onSave({
       data: data.data || TODAY,
       unidadeId: data.unidadeId,
@@ -4826,6 +4907,9 @@ function VenderProdutoModal({data, produtos, clients, onClose, onSave}) {
       origemPagamento,
       valor: Number(valorFinal.toFixed(2)),
       descricao: `Venda: ${produto.nome}${quantidade>1?` (${quantidade}x)`:""} — ${cliente?.nome || "Cliente"}`,
+      // Campo transiente (removido pelo App antes de persistir o lançamento) — só existe para o App
+      // registrar no log de auditoria quando o desconto ficou fora da faixa mín.–máx. do produto.
+      _overrideDesconto: descontoForaDaFaixa ? { produtoNome: produto.nome, desconto: Number(desconto)||0, min: descontoMin, max: descontoMax } : null,
     });
   }
 
@@ -4837,18 +4921,28 @@ function VenderProdutoModal({data, produtos, clients, onClose, onSave}) {
       ) : (
         <>
           <Field label="Produto">
-            <select className={inputCls} value={produtoId} onChange={e=>{setProdutoId(e.target.value); setDesconto(0);}}>
+            <select className={inputCls} value={produtoId} onChange={e=>{setProdutoId(e.target.value); setDesconto(0); setDescontoAutorizado(false);}}>
               {produtosAtivos.map(p => <option key={p.id} value={p.id}>{p.nome} — {fmtBRL(p.precoBase)}</option>)}
             </select>
           </Field>
           <Field label="Quantidade">
             <input type="number" min="1" className={inputCls} value={quantidade} onChange={e=>setQuantidade(Math.max(1, Number(e.target.value)))} />
           </Field>
-          {descontoMax > 0 && (
-            <Field label={`Desconto % (máx. ${descontoMax}%)`}>
-              <input type="number" min="0" max={descontoMax} className={inputCls} value={desconto}
-                onChange={e=>setDesconto(Math.min(descontoMax, Math.max(0, Number(e.target.value))))} />
-            </Field>
+          <Field label={`Desconto % (faixa ${descontoMin}%–${descontoMax}%)`}>
+            <input type="number" min="0" className={inputCls} value={desconto}
+              onChange={e=>{ setDesconto(Number(e.target.value)); setDescontoAutorizado(false); }} />
+          </Field>
+          {descontoForaDaFaixa && (
+            <div className={"flex items-center justify-between gap-3 rounded-lg p-3 mb-2 text-xs " + (descontoAutorizado ? "bg-green-50 border border-green-200 text-green-700" : "bg-amber-50 border border-amber-200 text-amber-700")}>
+              {descontoAutorizado ? (
+                <span>✓ Desconto fora da faixa autorizado pelo gestor. Pode vender.</span>
+              ) : (
+                <>
+                  <span>Fora da faixa permitida ({descontoMin}%–{descontoMax}%). Necessária autorização do gestor.</span>
+                  <button type="button" onClick={()=>setModalAutorizarDesconto(true)} className="px-3 py-1.5 rounded-lg bg-amber-600 text-white hover:bg-amber-700 flex-shrink-0 whitespace-nowrap">Solicitar autorização</button>
+                </>
+              )}
+            </div>
           )}
           <Field label="Origem">
             <select className={inputCls} value={origemPagamento} onChange={e=>setOrigemPagamento(e.target.value)}>
@@ -4863,9 +4957,15 @@ function VenderProdutoModal({data, produtos, clients, onClose, onSave}) {
           <div className="bg-slate-50 rounded-lg p-3 text-sm text-slate-700 my-2">Total: <strong>{fmtBRL(valorFinal)}</strong></div>
         </>
       )}
+      {modalAutorizarDesconto && (
+        <AutorizarDescontoModal produtoNome={produto?.nome} descontoSolicitado={Number(desconto)||0} descontoMin={descontoMin} descontoMax={descontoMax} currentUser={currentUser}
+          onClose={()=>setModalAutorizarDesconto(false)}
+          onAutorizado={()=>{ setDescontoAutorizado(true); setModalAutorizarDesconto(false); }} />
+      )}
       <div className="flex justify-end gap-2 mt-4">
         <button onClick={onClose} className="px-4 py-2 text-sm rounded-lg border border-slate-300">Cancelar</button>
-        <button onClick={confirmar} disabled={!produto} className="px-4 py-2 text-sm rounded-lg bg-teal-600 text-white hover:bg-teal-700 disabled:opacity-50">Vender e lançar no caixa</button>
+        <button onClick={confirmar} disabled={!produto || (descontoForaDaFaixa && !descontoAutorizado)} title={descontoForaDaFaixa && !descontoAutorizado ? "Solicite autorização do gestor para o desconto fora da faixa" : undefined}
+          className="px-4 py-2 text-sm rounded-lg bg-teal-600 text-white hover:bg-teal-700 disabled:opacity-50 disabled:cursor-not-allowed">Vender e lançar no caixa</button>
       </div>
     </Modal>
   );
@@ -5156,7 +5256,9 @@ function precoDaSessao(appt, cliente, guias, produtos, procedimentosTuss, conven
   if (cliente.produtoId) {
     const produto = produtos.find(p=>p.id===cliente.produtoId);
     if (produto) {
-      const descontoFrac = Math.min(cliente.descontoAplicado||0, produto.descontoMaximoPercent||0)/100;
+      // Não re-clampa: se o desconto salvo estiver fora da faixa mín.–máx. do produto, já foi
+      // autorizado pelo gestor no momento do cadastro (ver saveClient) — reportar o valor real cobrado.
+      const descontoFrac = (cliente.descontoAplicado||0)/100;
       const precoComDesconto = produto.precoBase * (1-descontoFrac);
       const porSessao = produto.sessoesIncluidas>0 ? precoComDesconto/produto.sessoesIncluidas : precoComDesconto;
       return { valor: porSessao, origem:"produto/pacote" };
