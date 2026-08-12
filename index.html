@@ -433,10 +433,18 @@ function isUltimaSessao(appt, cliente, guias, appointments, vendas, produtos){
   return sessaoAtual >= total;
 }
 
-function isEvolucaoAtrasada(appt, fichas){
+// Evolução pós-sessão (RN pedida explicitamente pelo usuário): toda sessão "atendida" precisa ter uma
+// evolução registrada depois (texto do profissional sobre como foi a sessão), gravada diretamente no
+// agendamento (`appt.evolucaoTexto`) — não é mais "qualquer ficha preenchida no mesmo dia" (definição antiga,
+// frouxa: uma ficha de avaliação de outro atendimento no mesmo dia contava como se fosse a evolução desta
+// sessão). Cada sessão tem sua própria evolução, vinculada 1:1 pelo id do agendamento.
+function evolucaoPendente(appt){
   if (appt.status !== "atendido") return false;
   if (appt.data >= TODAY) return false;
-  return !fichas.some(f => f.clienteId===appt.clienteId && f.data===appt.data && f.status!=="pendente_paciente");
+  return !((appt.evolucaoTexto||"").trim());
+}
+function isEvolucaoAtrasada(appt){
+  return evolucaoPendente(appt);
 }
 
 const SINALIZACAO_CONFIG = {
@@ -453,7 +461,7 @@ function getSinalizacao(appt, cliente, guias, fichas, appointments, vendas, prod
   const guiaVinculada = appt.guiaId ? (guias||[]).find(g=>g.id===appt.guiaId) : null;
   if (guiaVinculada && guiaAlertaSaldoOuValidade(guiaVinculada)) return "guia";
   if (isUltimaSessao(appt, cliente, guias, appointments, vendas, produtos)) return "amarela";
-  if (isEvolucaoAtrasada(appt, fichas)) return "laranja";
+  if (isEvolucaoAtrasada(appt)) return "laranja";
   return null;
 }
 
@@ -1291,6 +1299,35 @@ function App({currentUser, onLogout}) {
   const lancamentosNaUnidade = useMemo(() => unidadeFiltro==="todas" ? lancamentos : lancamentos.filter(l=>l.unidadeId===unidadeFiltro), [lancamentos, unidadeFiltro]);
   const guiasNaUnidade = useMemo(() => unidadeFiltro==="todas" ? guias : guias.filter(g=>g.unidadePrestadoraId===unidadeFiltro), [guias, unidadeFiltro]);
 
+  // Evolução pós-sessão (RN pedida explicitamente pelo usuário): quando o profissional logado tem sessões
+  // já realizadas ("atendido", data no passado) sem evolução registrada, ele é avisado — banner no topo da
+  // Agenda + notificação simulada no canal "Push" (aba Notificações). Vínculo por nome, mesmo padrão já
+  // usado para "agenda só a própria" (profissionaisNaUnidade acima).
+  const meuProfissional = useMemo(() => professionals.find(p => p.nome === currentUser?.nome), [professionals, currentUser]);
+  const minhasEvolucoesPendentes = useMemo(() => {
+    if (currentUser?.role !== "fisioterapeuta" || !meuProfissional) return [];
+    return appointments.filter(a => a.profissionalId === meuProfissional.id && evolucaoPendente(a));
+  }, [appointments, currentUser, meuProfissional]);
+  const evolucoesNotificadasRef = useRef(new Set());
+  useEffect(() => {
+    const idsPendentes = minhasEvolucoesPendentes.map(a=>a.id);
+    const novas = idsPendentes.filter(id => !evolucoesNotificadasRef.current.has(id));
+    if (novas.length > 0) {
+      novas.forEach(id => evolucoesNotificadasRef.current.add(id));
+      const n = minhasEvolucoesPendentes.length;
+      pushLog("Push", `🔔 Você tem ${n} evolução${n>1?"ões":""} pendente${n>1?"s":""} de registro — sessões já realizadas ainda sem evolução preenchida.`);
+    }
+  }, [minhasEvolucoesPendentes]);
+
+  function salvarEvolucao(apptId, texto){
+    const appt = appointments.find(a=>a.id===apptId);
+    setAppointments(list => list.map(a => a.id===apptId
+      ? {...a, evolucaoTexto: texto, evolucaoRegistradaEm: TODAY, evolucaoProfissionalId: meuProfissional?.id || a.profissionalId}
+      : a));
+    const cliente = clients.find(c=>c.id===appt?.clienteId);
+    pushLog("Interno", `Evolução registrada para ${cliente?.nome || "cliente"} (sessão de ${fmtDataBR(appt?.data||TODAY)}) por ${currentUser?.nome || "—"}.`);
+  }
+
   function unidadePadraoParaProfissional(profId){
     if (unidadeFiltro !== "todas") return unidadeFiltro;
     const prof = professionals.find(p=>p.id===profId);
@@ -1303,6 +1340,7 @@ function App({currentUser, onLogout}) {
         unidades={unidades} unidadeFiltro={unidadeFiltro} setUnidadeFiltro={setUnidadeFiltro}
         currentUser={currentUser} perms={perms} onLogout={onLogout}
         professionals={professionals} clients={clients} appointments={appointments}
+        evolucoesPendentesCount={minhasEvolucoesPendentes.length}
         onRegistrarPonto={registrarPonto} onConfirmarChegada={confirmarChegadaPaciente} />
       <main className="max-w-[1500px] mx-auto p-4">
         {tab === "agenda" && (
@@ -1316,12 +1354,15 @@ function App({currentUser, onLogout}) {
             produtos={produtos}
             selectedDate={selectedDate}
             setSelectedDate={setSelectedDate}
+            currentUser={currentUser}
             onStatusChange={handleStatusChange}
             onMoveProfessional={handleMoveProfessional}
             onNewAppointment={(profId, dataOverride)=>setModal({type:"appt", data:{profissionalId:profId, data:dataOverride||selectedDate, hora:"09:00", status:"agendado", tipo:"sessao", duracaoMin:50, unidadeId:unidadePadraoParaProfissional(profId), clienteId:clients[0]?.id||"", sessaoAtual:1, pagamentoVinculado:false}})}
             onVenderProduto={perms.tabs.includes("caixa") ? (appt)=>setModal({type:"venderProduto", data:{clienteId:appt.clienteId, unidadeId:appt.unidadeId, data:appt.data}}) : null}
             onConfirmarChegada={confirmarChegadaPaciente}
             onViewClientProfile={(c)=>setModal({type:"clientProfile", data:c})}
+            evolucoesPendentes={minhasEvolucoesPendentes}
+            onRegistrarEvolucao={(cliente)=>setModal({type:"client", data:cliente, abaInicial:"evolucao"})}
           />
         )}
         {tab === "clientes" && (
@@ -1409,11 +1450,12 @@ function App({currentUser, onLogout}) {
       {modal?.type === "appt" && (
         <AppointmentModal data={modal.data} clients={clients} professionals={profissionaisClinicos} guias={guias}
           appointments={appointments} unidades={unidades} produtos={produtos}
-          procedimentosTuss={procedimentosTuss} convenios={convenios} vendas={vendas}
+          procedimentosTuss={procedimentosTuss} convenios={convenios} vendas={vendas} currentUser={currentUser}
           onClose={()=>setModal(null)} onSave={createAppointment} onVincularProduto={vincularProdutoAoCliente} />
       )}
       {modal?.type === "client" && (
-        <ClientModal data={modal.data} professionals={profissionaisClinicos} convenios={convenios} produtos={produtos} fichas={fichas} modelosFicha={modelosFicha} currentUser={currentUser} onClose={()=>setModal(null)} onSave={saveClient} />
+        <ClientModal data={modal.data} abaInicial={modal.abaInicial} professionals={profissionaisClinicos} convenios={convenios} produtos={produtos} fichas={fichas} modelosFicha={modelosFicha}
+          appointments={appointments} currentUser={currentUser} onClose={()=>setModal(null)} onSave={saveClient} onSalvarEvolucao={salvarEvolucao} />
       )}
       {modal?.type === "importClientes" && (
         <ImportClientesModal onClose={()=>setModal(null)} onImportar={importarClientesLote} />
@@ -1455,7 +1497,7 @@ function App({currentUser, onLogout}) {
       {modal?.type === "clientProfile" && (
         <ClientProfileModal cliente={modal.data} clients={clients} appointments={appointments} professionals={professionals}
           guias={guias} fichas={fichas} modelosFicha={modelosFicha}
-          produtos={produtos} procedimentosTuss={procedimentosTuss} convenios={convenios}
+          produtos={produtos} procedimentosTuss={procedimentosTuss} convenios={convenios} currentUser={currentUser}
           onClose={()=>setModal(null)} onEdit={(c)=>setModal({type:"client", data:c})}
           onRegistrarAlta={registrarAlta} onReverterAlta={reverterAlta} />
       )}
@@ -1469,7 +1511,7 @@ function App({currentUser, onLogout}) {
 }
 
 /* ---------------- TopBar ---------------- */
-function TopBar({tab, setTab, notifyEnabled, setNotifyEnabled, onReset, unidades, unidadeFiltro, setUnidadeFiltro, currentUser, perms, onLogout, professionals, clients, appointments, onRegistrarPonto, onConfirmarChegada}) {
+function TopBar({tab, setTab, notifyEnabled, setNotifyEnabled, onReset, unidades, unidadeFiltro, setUnidadeFiltro, currentUser, perms, onLogout, professionals, clients, appointments, evolucoesPendentesCount, onRegistrarPonto, onConfirmarChegada}) {
   const [modalLeitor, setModalLeitor] = useState(false);
   const todasAbas = [
     {id:"agenda", label:"Agenda"},
@@ -1497,8 +1539,11 @@ function TopBar({tab, setTab, notifyEnabled, setNotifyEnabled, onReset, unidades
         <nav className="flex gap-1 bg-slate-100 rounded-lg p-1">
           {tabs.map(t => (
             <button key={t.id} onClick={()=>setTab(t.id)}
-              className={"px-3 py-1.5 rounded-md text-sm font-medium transition " + (tab===t.id ? "bg-white shadow text-teal-700" : "text-slate-500 hover:text-slate-700")}>
+              className={"px-3 py-1.5 rounded-md text-sm font-medium transition relative " + (tab===t.id ? "bg-white shadow text-teal-700" : "text-slate-500 hover:text-slate-700")}>
               {t.label}
+              {t.id==="notificacoes" && evolucoesPendentesCount>0 && (
+                <span className="absolute -top-1 -right-1 bg-orange-500 text-white text-[9px] font-semibold rounded-full min-w-[16px] h-4 px-1 flex items-center justify-center" title="Evoluções pendentes de registro">{evolucoesPendentesCount}</span>
+              )}
             </button>
           ))}
         </nav>
@@ -1544,7 +1589,9 @@ function TopBar({tab, setTab, notifyEnabled, setNotifyEnabled, onReset, unidades
 }
 
 /* ---------------- Agenda Kanban ---------------- */
-function Agenda({professionals, clients, appointments, guias, fichas, vendas, produtos, selectedDate, setSelectedDate, onStatusChange, onMoveProfessional, onNewAppointment, onVenderProduto, onConfirmarChegada, onViewClientProfile}) {
+function Agenda({professionals, clients, appointments, guias, fichas, vendas, produtos, selectedDate, setSelectedDate, currentUser, onStatusChange, onMoveProfessional, onNewAppointment, onVenderProduto, onConfirmarChegada, onViewClientProfile, evolucoesPendentes, onRegistrarEvolucao}) {
+  // Regra pedida explicitamente pelo usuário: usuário "profissional" (fisioterapeuta) não vê pagamentos/valores.
+  const podeVerValores = currentUser?.role !== "fisioterapeuta";
   const dragItem = useRef(null);
   const [apptChegadaBiometria, setApptChegadaBiometria] = useState(null);
   const [visao, setVisao] = useState("dia"); // "dia" (kanban) | "semana" (agenda individual por profissional)
@@ -1600,6 +1647,26 @@ function Agenda({professionals, clients, appointments, guias, fichas, vendas, pr
 
   return (
     <div>
+      {/* Evolução pós-sessão (RN pedida explicitamente pelo usuário): avisa o profissional logado sobre
+          sessões já realizadas que ainda não têm a evolução registrada, com atalho direto para cada cliente. */}
+      {(evolucoesPendentes||[]).length > 0 && (
+        <div className="bg-orange-50 border border-orange-200 rounded-xl p-4 mb-4">
+          <div className="text-sm font-semibold text-orange-800 mb-2">🔔 Você tem {evolucoesPendentes.length} evolução{evolucoesPendentes.length>1?"ões":""} pendente{evolucoesPendentes.length>1?"s":""} de registro</div>
+          <div className="flex flex-col gap-1.5">
+            {evolucoesPendentes.map(a => {
+              const cliente = clients.find(c=>c.id===a.clienteId);
+              return (
+                <div key={a.id} className="flex items-center justify-between gap-2 text-sm bg-white border border-orange-100 rounded-lg px-3 py-1.5">
+                  <span className="text-slate-700">{cliente?.nome || "Cliente removido"} — sessão de {fmtDataBR(a.data)}</span>
+                  {cliente && (
+                    <button onClick={()=>onRegistrarEvolucao(cliente)} className="text-orange-700 text-xs font-medium hover:underline flex-shrink-0">Registrar evolução</button>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
       <div className="bg-gradient-to-r from-teal-600 to-teal-800 text-white rounded-2xl p-5 mb-4 shadow-md">
         <div className="text-xs uppercase tracking-wide text-teal-100 mb-3">Placar da clínica</div>
         <div className="grid grid-cols-2 md:grid-cols-6 gap-4">
@@ -1729,7 +1796,7 @@ function Agenda({professionals, clients, appointments, guias, fichas, vendas, pr
                         📦 {vendaVinculada.produtoNome} · {sessaoAtual}/{produtoDaVenda?.sessoesIncluidas||"?"}
                       </div>
                     )}
-                    {(Number(appt.valor)||0) > 0 && (
+                    {podeVerValores && (Number(appt.valor)||0) > 0 && (
                       <div className="text-[10px] text-emerald-600 font-medium mt-0.5">{fmtBRL(appt.valor)} · {guiaVinculada ? "guia" : "particular"}</div>
                     )}
                     {alertaGuia && (
@@ -1821,8 +1888,11 @@ function AgendaSemanalProfissional({professional, appointments, clients, weekSta
 }
 
 /* ---------------- Appointment Modal ---------------- */
-function AppointmentModal({data, clients, professionals, guias, appointments, unidades, produtos, procedimentosTuss, convenios, vendas, onClose, onSave, onVincularProduto}) {
+function AppointmentModal({data, clients, professionals, guias, appointments, unidades, produtos, procedimentosTuss, convenios, vendas, currentUser, onClose, onSave, onVincularProduto}) {
   const [form, setForm] = useState({ tipo:"sessao", duracaoMin:50, unidadeId:unidades?.[0]?.id||"", permitirForaExpediente:false, confirmarExcecaoGuia:false, ...data });
+  // Regra pedida explicitamente pelo usuário: usuário "profissional" (fisioterapeuta) não vê pagamentos/valores.
+  // O valor continua sendo calculado e gravado automaticamente em segundo plano (useEffect abaixo) mesmo com o campo oculto.
+  const podeVerValores = currentUser?.role !== "fisioterapeuta";
   const [valorEditadoManualmente, setValorEditadoManualmente] = useState((data?.valor||0) > 0);
   const clienteSelecionado = clients.find(c=>c.id===form.clienteId);
   const guiasDoCliente = guias.filter(g => g.clienteId===form.clienteId && g.status==="aberta" && g.quantidadeUtilizada < g.quantidadeAutorizada);
@@ -2014,7 +2084,7 @@ function AppointmentModal({data, clients, professionals, guias, appointments, un
         </div>
       )}
 
-      {!ehAvaliacao && tipoPagamento === "particular" && (
+      {podeVerValores && !ehAvaliacao && tipoPagamento === "particular" && (
         <Field label="Compra vinculada (pacote) — opcional">
           <select className={inputCls} value={form.vendaId||""} onChange={e=>{ setValorEditadoManualmente(false); setForm({...form, vendaId:e.target.value||null}); }}>
             <option value="">Sem pacote vinculado (cobrança avulsa)</option>
@@ -2028,7 +2098,7 @@ function AppointmentModal({data, clients, professionals, guias, appointments, un
         </Field>
       )}
 
-      {!ehAvaliacao && (tipoPagamento === "particular" || tipoPagamento === "convenio") && (
+      {podeVerValores && !ehAvaliacao && (tipoPagamento === "particular" || tipoPagamento === "convenio") && (
         <Field label={`Valor da sessão (R$)${tipoPagamento==="convenio" ? " — sugerido pela tabela do convênio" : compraSelecionada ? " — sugerido pela compra do pacote" : ""}`}>
           <MoneyInput className={inputCls} value={form.valor ?? 0}
             onChange={v=>{ setValorEditadoManualmente(true); setForm({...form, valor:v}); }} />
@@ -2300,7 +2370,45 @@ function ImportClientesModal({onClose, onImportar}) {
   );
 }
 
-function ClientModal({data, professionals, convenios, produtos, fichas, modelosFicha, currentUser, onClose, onSave}) {
+// Evolução de uma sessão específica (RN pedida explicitamente pelo usuário: toda sessão realizada precisa
+// de uma evolução registrada depois). Gerencia seu próprio texto local para poder editar sem afetar as
+// outras linhas; salva imediatamente ao clicar (não depende do botão "Salvar" do cadastro do cliente).
+function EvolucaoRow({appt, professionals, onSalvar}){
+  const [texto, setTexto] = useState(appt.evolucaoTexto || "");
+  const [editando, setEditando] = useState(!appt.evolucaoTexto);
+  const profissional = professionals.find(p=>p.id===appt.profissionalId);
+  const pendente = evolucaoPendente(appt);
+  return (
+    <div className={"rounded-lg border p-3 " + (pendente ? "border-orange-300 bg-orange-50" : "border-slate-200 bg-white")}>
+      <div className="flex items-center justify-between mb-1.5 flex-wrap gap-1">
+        <span className="text-sm font-medium text-slate-700">{fmtDataBR(appt.data)} {appt.hora} — {profissional?.nome || "—"}</span>
+        {pendente ? (
+          <span className="text-[10px] font-semibold text-orange-700 bg-orange-100 rounded-full px-2 py-0.5">Pendente</span>
+        ) : (
+          <span className="text-[10px] font-semibold text-green-700 bg-green-100 rounded-full px-2 py-0.5">Registrada{appt.evolucaoRegistradaEm ? ` em ${fmtDataBR(appt.evolucaoRegistradaEm)}` : ""}</span>
+        )}
+      </div>
+      {editando ? (
+        <>
+          <textarea rows={3} className={inputCls + " resize-y"} value={texto} onChange={e=>setTexto(e.target.value)}
+            placeholder="Como foi a sessão: evolução do quadro, dor, resposta ao tratamento, orientações..." />
+          <div className="flex justify-end gap-2 mt-2">
+            {appt.evolucaoTexto && <button type="button" onClick={()=>{ setTexto(appt.evolucaoTexto); setEditando(false); }} className="text-xs text-slate-500 hover:underline">Cancelar</button>}
+            <button type="button" disabled={!texto.trim()} onClick={()=>{ onSalvar(appt.id, texto.trim()); setEditando(false); }}
+              className="px-3 py-1.5 text-xs rounded-lg bg-teal-600 text-white hover:bg-teal-700 disabled:opacity-50 disabled:cursor-not-allowed">Salvar evolução</button>
+          </div>
+        </>
+      ) : (
+        <div className="flex items-start justify-between gap-2">
+          <p className="text-sm text-slate-600 whitespace-pre-wrap">{appt.evolucaoTexto}</p>
+          <button type="button" onClick={()=>setEditando(true)} className="text-xs text-teal-600 hover:underline flex-shrink-0">Editar</button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function ClientModal({data, abaInicial, professionals, convenios, produtos, fichas, modelosFicha, appointments, currentUser, onClose, onSave, onSalvarEvolucao}) {
   const [form, setForm] = useState(data);
   const [modalCadastroBiometria, setModalCadastroBiometria] = useState(false);
   const [descontoAutorizado, setDescontoAutorizado] = useState(false);
@@ -2316,12 +2424,43 @@ function ClientModal({data, professionals, convenios, produtos, fichas, modelosF
   const valorFinalProduto = produtoSelecionado ? produtoSelecionado.precoBase * (1 - (Number(form.descontoAplicado)||0)/100) : null;
   // Desconto fora da faixa mín.–máx. do produto exige autorização do gestor (senha) antes de poder salvar.
   const descontoForaDaFaixa = !!produtoSelecionado && ((Number(form.descontoAplicado)||0) > descontoMax || (Number(form.descontoAplicado)||0) < descontoMin);
+  // Regra pedida explicitamente pelo usuário: usuário "profissional" (fisioterapeuta) não vê pagamentos/valores.
+  const podeVerValores = currentUser?.role !== "fisioterapeuta";
   // RN pedida explicitamente pelo usuário: mostrar as fichas clínicas do cliente aqui no próprio cadastro
   // (só faz sentido para cliente já existente — um cliente novo ainda não tem ficha nenhuma). Lista somativa
   // e só leitura (criar/editar ficha continua sendo feito pela aba Fichas Clínicas).
   const fichasDoCliente = (data.id && fichas) ? fichas.filter(f=>f.clienteId===data.id).sort((a,b)=>b.data.localeCompare(a.data)) : [];
+  // RN pedida explicitamente pelo usuário: aba "Evolução" com as sessões já realizadas deste cliente,
+  // cada uma precisando de uma evolução registrada depois — ver EvolucaoRow acima.
+  const sessoesAtendidasDoCliente = (data.id && appointments)
+    ? appointments.filter(a=>a.clienteId===data.id && a.status==="atendido").sort((a,b)=>(b.data+b.hora).localeCompare(a.data+a.hora))
+    : [];
+  const evolucoesPendentesCliente = sessoesAtendidasDoCliente.filter(evolucaoPendente).length;
+
+  const abas = [
+    {id:"dados", label:"Dados gerais"},
+    {id:"observacoes", label:"Observações"},
+    ...(data.id ? [{id:"fichas", label:"Fichas clínicas"}] : []),
+    ...(data.id ? [{id:"evolucao", label:"Evolução"}] : []),
+  ];
+  const [aba, setAba] = useState(abaInicial && abas.some(a=>a.id===abaInicial) ? abaInicial : "dados");
+
   return (
     <Modal title={data.id ? "Editar cliente" : "Novo cliente"} onClose={onClose} wide>
+      <div className="flex gap-1 bg-slate-100 rounded-lg p-1 mb-4 w-fit">
+        {abas.map(a => (
+          <button type="button" key={a.id} onClick={()=>setAba(a.id)}
+            className={"px-3 py-1.5 rounded-md text-xs font-medium transition " + (aba===a.id ? "bg-white shadow text-teal-700" : "text-slate-500 hover:text-slate-700")}>
+            {a.label}
+            {a.id==="evolucao" && evolucoesPendentesCliente>0 && (
+              <span className="ml-1.5 inline-flex items-center justify-center bg-orange-500 text-white text-[9px] font-semibold rounded-full min-w-[15px] h-[15px] px-1 align-middle">{evolucoesPendentesCliente}</span>
+            )}
+          </button>
+        ))}
+      </div>
+
+      {aba === "dados" && (
+      <>
       <div className="grid grid-cols-2 gap-x-4">
         <Field label="Nome completo"><input className={inputCls} value={form.nome} onChange={e=>setForm({...form,nome:e.target.value})} /></Field>
         <Field label="Telefone"><input className={inputCls} value={form.telefone} onChange={e=>setForm({...form,telefone:e.target.value})} /></Field>
@@ -2356,10 +2495,14 @@ function ClientModal({data, professionals, convenios, produtos, fichas, modelosF
         <Field label="Tratamento"><input className={inputCls} value={form.tratamento} onChange={e=>setForm({...form,tratamento:e.target.value})} /></Field>
         <Field label="Nome do pacote"><input className={inputCls} value={form.pacoteNome} onChange={e=>setForm({...form,pacoteNome:e.target.value})} /></Field>
         <Field label="Total de sessões do pacote"><input type="number" className={inputCls} value={form.sessoesTotal} onChange={e=>setForm({...form,sessoesTotal:Number(e.target.value)})} /></Field>
-        <Field label="Valor por sessão (R$)"><MoneyInput className={inputCls} value={form.valorSessao} onChange={v=>setForm({...form,valorSessao:v})} /></Field>
+        {podeVerValores && (
+          <Field label="Valor por sessão (R$)"><MoneyInput className={inputCls} value={form.valorSessao} onChange={v=>setForm({...form,valorSessao:v})} /></Field>
+        )}
         <Field label="Data de início"><DateInput value={form.dataInicio} onChange={v=>setForm({...form,dataInicio:v})} /></Field>
       </div>
 
+      {podeVerValores && (
+      <>
       <div className="border-t border-slate-100 pt-3 mt-1 mb-3">
         <span className="text-sm font-medium text-slate-700 mb-2 block">Produto/serviço vinculado (catálogo de vendas)</span>
         <Field label="">
@@ -2417,6 +2560,8 @@ function ClientModal({data, professionals, convenios, produtos, fichas, modelosF
         <AutorizarDescontoModal produtoNome={produtoSelecionado?.nome} descontoSolicitado={Number(form.descontoAplicado)||0} descontoMin={descontoMin} descontoMax={descontoMax} currentUser={currentUser}
           onClose={()=>setModalAutorizarDesconto(false)}
           onAutorizado={()=>{ setDescontoAutorizado(true); setModalAutorizarDesconto(false); }} />
+      )}
+      </>
       )}
 
       <Field label="Profissionais que atendem">
@@ -2507,17 +2652,19 @@ function ClientModal({data, professionals, convenios, produtos, fichas, modelosF
         <CadastroBiometriaModal nome={form.nome} onClose={()=>setModalCadastroBiometria(false)}
           onCadastrado={()=>{ setForm({...form, biometriaCadastrada:true}); setModalCadastroBiometria(false); }} />
       )}
+      </>
+      )}
 
-      <div className="border-t border-slate-100 pt-3 mt-2 mb-1"><span className="text-sm font-medium text-slate-700">Observações</span></div>
-      <Field label="">
-        <textarea rows={3} className={inputCls + " resize-y"} value={form.observacoes||""}
-          onChange={e=>setForm({...form, observacoes:e.target.value})}
-          placeholder="Anotações gerais sobre o paciente: restrições, preferências, alertas, etc." />
-      </Field>
+      {aba === "observacoes" && (
+        <Field label="">
+          <textarea rows={10} className={inputCls + " resize-y"} value={form.observacoes||""}
+            onChange={e=>setForm({...form, observacoes:e.target.value})}
+            placeholder="Anotações gerais sobre o paciente: restrições, preferências, alertas, etc." />
+        </Field>
+      )}
 
-      {data.id && (
-        <div className="border-t border-slate-100 pt-3 mt-2 mb-1">
-          <span className="text-sm font-medium text-slate-700 block mb-2">Fichas clínicas</span>
+      {aba === "fichas" && data.id && (
+        <div>
           {fichasDoCliente.length === 0 ? (
             <p className="text-xs text-slate-400 italic mb-2">Nenhuma ficha clínica registrada para este cliente ainda.</p>
           ) : (
@@ -2536,6 +2683,21 @@ function ClientModal({data, professionals, convenios, produtos, fichas, modelosF
             </div>
           )}
           <p className="text-[11px] text-slate-400">Para criar ou editar uma ficha, use a aba Fichas Clínicas.</p>
+        </div>
+      )}
+
+      {aba === "evolucao" && data.id && (
+        <div>
+          <p className="text-xs text-slate-500 mb-3">Toda sessão realizada precisa de uma evolução registrada logo em seguida — enquanto isso não acontece, o profissional responsável recebe uma notificação para lembrá-lo.</p>
+          {sessoesAtendidasDoCliente.length === 0 ? (
+            <p className="text-sm text-slate-400 italic">Nenhuma sessão realizada ainda para este cliente.</p>
+          ) : (
+            <div className="space-y-2">
+              {sessoesAtendidasDoCliente.map(a => (
+                <EvolucaoRow key={a.id} appt={a} professionals={professionals} onSalvar={onSalvarEvolucao} />
+              ))}
+            </div>
+          )}
         </div>
       )}
 
@@ -2568,9 +2730,11 @@ function calcPerfilCliente(cliente, appointments, professionals, guias, produtos
   return { apptsCliente, confirmados, ltv, especialidades, profissionaisVistos, frequenciaSemanal, faltas, desmarcacoes };
 }
 
-function ClientProfileModal({cliente, clients, appointments, professionals, guias, fichas, modelosFicha, produtos, procedimentosTuss, convenios, onClose, onEdit, onRegistrarAlta, onReverterAlta}) {
+function ClientProfileModal({cliente, clients, appointments, professionals, guias, fichas, modelosFicha, produtos, procedimentosTuss, convenios, currentUser, onClose, onEdit, onRegistrarAlta, onReverterAlta}) {
   const atual = clients.find(c=>c.id===cliente.id) || cliente;
   const stats = useMemo(() => calcPerfilCliente(atual, appointments, professionals, guias, produtos, procedimentosTuss, convenios), [atual, appointments, professionals, guias, produtos, procedimentosTuss, convenios]);
+  // Regra pedida explicitamente pelo usuário: usuário "profissional" (fisioterapeuta) não vê pagamentos/valores.
+  const podeVerValores = currentUser?.role !== "fisioterapeuta";
   const guiasCliente = guias.filter(g=>g.clienteId===atual.id);
   const fichasCliente = fichas.filter(f=>f.clienteId===atual.id).sort((a,b)=>b.data.localeCompare(a.data));
   const [altaForm, setAltaForm] = useState({ profissionalId: atual.profissionaisIds[0] || professionals[0]?.id || "", data: TODAY, motivo: "" });
@@ -2608,7 +2772,7 @@ function ClientProfileModal({cliente, clients, appointments, professionals, guia
       </div>
 
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
-        <KpiCard label="LTV (valor gerado)" value={fmtBRL(stats.ltv)} tone="teal" sub="sessões confirmadas × valor/sessão" />
+        {podeVerValores && <KpiCard label="LTV (valor gerado)" value={fmtBRL(stats.ltv)} tone="teal" sub="sessões confirmadas × valor/sessão" />}
         <KpiCard label="Sessões pagas" value={stats.confirmados.length} tone="green" sub={`de ${stats.apptsCliente.length} agendamentos`} />
         <KpiCard label="Frequência semanal" value={stats.frequenciaSemanal.toFixed(1)} tone="default" sub="sessões/semana em média" />
         <KpiCard label="Especialidades atendidas" value={stats.especialidades.length} tone="default" sub={stats.especialidades.join(", ") || "—"} />
@@ -2623,9 +2787,9 @@ function ClientProfileModal({cliente, clients, appointments, professionals, guia
       <div className="mb-2 text-sm font-medium text-slate-700">Histórico de atendimentos</div>
       <div className="bg-white rounded-xl border border-slate-200 overflow-x-auto mb-4 max-h-56 overflow-y-auto">
         <table className="w-full text-sm">
-          <thead className="bg-slate-50 text-slate-500 text-xs uppercase sticky top-0"><tr><th className="text-left px-3 py-2">Data</th><th className="text-left px-3 py-2">Profissional</th><th className="text-left px-3 py-2">Status</th><th className="text-right px-3 py-2">Valor</th></tr></thead>
+          <thead className="bg-slate-50 text-slate-500 text-xs uppercase sticky top-0"><tr><th className="text-left px-3 py-2">Data</th><th className="text-left px-3 py-2">Profissional</th><th className="text-left px-3 py-2">Status</th>{podeVerValores && <th className="text-right px-3 py-2">Valor</th>}</tr></thead>
           <tbody>
-            {stats.apptsCliente.length===0 && <tr><td colSpan="4" className="text-center py-3 text-slate-400">Sem agendamentos.</td></tr>}
+            {stats.apptsCliente.length===0 && <tr><td colSpan={podeVerValores?4:3} className="text-center py-3 text-slate-400">Sem agendamentos.</td></tr>}
             {stats.apptsCliente.slice().reverse().map(a => {
               const cfg = STATUS_CONFIG[a.status];
               return (
@@ -2633,7 +2797,7 @@ function ClientProfileModal({cliente, clients, appointments, professionals, guia
                   <td className="px-3 py-1.5">{fmtDataBR(a.data)} {a.hora}</td>
                   <td className="px-3 py-1.5 text-slate-500">{professionals.find(p=>p.id===a.profissionalId)?.nome}</td>
                   <td className="px-3 py-1.5"><span className={"text-xs font-medium border rounded-full px-2 py-0.5 " + cfg.badge}>{cfg.label}</span></td>
-                  <td className="px-3 py-1.5 text-right text-slate-500">{a.status==="atendido" ? fmtBRL(precoDaSessao(a, atual, guias||[], produtos||[], procedimentosTuss||[], convenios||[]).valor) : "—"}</td>
+                  {podeVerValores && <td className="px-3 py-1.5 text-right text-slate-500">{a.status==="atendido" ? fmtBRL(precoDaSessao(a, atual, guias||[], produtos||[], procedimentosTuss||[], convenios||[]).valor) : "—"}</td>}
                 </tr>
               );
             })}
@@ -2774,7 +2938,7 @@ function ProfessionalDashboard({professionals, appointments, clients, fichas}) {
     const avaliacoesMes = apptsProfMes.filter(a=>(a.tipo||"sessao")==="avaliacao").length;
     const desmarcadosMes = apptsProfMes.filter(a=>a.status==="desmarcado").length;
     const faltasMes = apptsProfMes.filter(a=>a.status==="faltou").length;
-    const evolucoesAtraso = apptsProf.filter(a=>isEvolucaoAtrasada(a, fichas)).length;
+    const evolucoesAtraso = apptsProf.filter(a=>isEvolucaoAtrasada(a)).length;
     const pacientesUnicos = new Set(apptsProf.map(a=>a.clienteId)).size;
     const faturamentoMes = confirmadosMes.reduce((s,a) => { const c = clients.find(cl=>cl.id===a.clienteId); return s + (c?.valorSessao||0); }, 0);
     const comissao = prof.comissaoTipo === "fixo"
@@ -5896,7 +6060,7 @@ function NotificationsPanel({log, notifyEnabled, setNotifyEnabled}) {
         {log.length===0 && <div className="p-4 text-sm text-slate-400">Nenhuma notificação ainda.</div>}
         {log.map(l => (
           <div key={l.id} className="p-3 flex items-start gap-3">
-            <span className={"text-[10px] font-semibold px-2 py-1 rounded-full " + (l.canal==="WhatsApp" ? "bg-green-100 text-green-700" : l.canal==="E-mail" ? "bg-blue-100 text-blue-700" : "bg-slate-100 text-slate-600")}>{l.canal}</span>
+            <span className={"text-[10px] font-semibold px-2 py-1 rounded-full " + (l.canal==="WhatsApp" ? "bg-green-100 text-green-700" : l.canal==="E-mail" ? "bg-blue-100 text-blue-700" : l.canal==="Push" ? "bg-orange-100 text-orange-700" : "bg-slate-100 text-slate-600")}>{l.canal}</span>
             <div className="flex-1">
               <div className="text-sm text-slate-700">{l.msg}</div>
               <div className="text-[11px] text-slate-400 mt-0.5">{l.ts}</div>
