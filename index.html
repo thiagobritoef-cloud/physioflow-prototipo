@@ -447,6 +447,32 @@ function isEvolucaoAtrasada(appt){
   return evolucaoPendente(appt);
 }
 
+// Notificação push real (RN pedida explicitamente pelo usuário: "criar uma notificação push que será
+// enviada ao profissional sobre a realização da evolução"). Usa a Web Notification API do navegador — é
+// a única forma de push "de verdade" possível num protótipo sem backend/service worker dedicado: aparece
+// como um toast do sistema operacional enquanto o navegador estiver aberto, mesmo com o PhysioFlow em
+// segundo plano. Continua funcionando lado a lado com o registro simulado no canal "Push" da aba
+// Notificações (esse já existia e serve de trilha de auditoria dentro do app).
+function statusPermissaoPush(){
+  if (typeof Notification === "undefined") return "unsupported";
+  return Notification.permission; // "granted" | "denied" | "default"
+}
+function solicitarPermissaoPush(){
+  if (typeof Notification === "undefined") return Promise.resolve("unsupported");
+  if (Notification.permission !== "default") return Promise.resolve(Notification.permission);
+  return Notification.requestPermission();
+}
+function dispararNotificacaoPushNavegador(titulo, corpo){
+  if (typeof Notification === "undefined" || Notification.permission !== "granted") return;
+  try {
+    const n = new Notification(titulo, { body: corpo, tag: "physioflow-evolucao" });
+    n.onclick = () => { try { window.focus(); } catch(e){} };
+  } catch(e) {
+    // Alguns contextos (ex.: iframe sem permissão, navegador sem suporte real) lançam mesmo com
+    // permission==="granted" — falha silenciosa, o registro no log interno cobre esse caso.
+  }
+}
+
 const SINALIZACAO_CONFIG = {
   vermelha: { dot:"bg-red-500",    label:"Sem pagamento vinculado" },
   verde:    { dot:"bg-green-500",  label:"Avaliação" },
@@ -1312,12 +1338,14 @@ function App({currentUser, onLogout}) {
   useEffect(() => {
     const idsPendentes = minhasEvolucoesPendentes.map(a=>a.id);
     const novas = idsPendentes.filter(id => !evolucoesNotificadasRef.current.has(id));
-    if (novas.length > 0) {
+    if (novas.length > 0 && notifyEnabled) {
       novas.forEach(id => evolucoesNotificadasRef.current.add(id));
       const n = minhasEvolucoesPendentes.length;
-      pushLog("Push", `🔔 Você tem ${n} evolução${n>1?"ões":""} pendente${n>1?"s":""} de registro — sessões já realizadas ainda sem evolução preenchida.`);
+      const corpo = `Você tem ${n} evolução${n>1?"ões":""} pendente${n>1?"s":""} de registro — sessões já realizadas ainda sem evolução preenchida.`;
+      pushLog("Push", `🔔 ${corpo}`);
+      dispararNotificacaoPushNavegador("PhysioFlow — Evolução pendente", corpo);
     }
-  }, [minhasEvolucoesPendentes]);
+  }, [minhasEvolucoesPendentes, notifyEnabled]);
 
   function salvarEvolucao(apptId, texto){
     const appt = appointments.find(a=>a.id===apptId);
@@ -1592,6 +1620,12 @@ function TopBar({tab, setTab, notifyEnabled, setNotifyEnabled, onReset, unidades
 function Agenda({professionals, clients, appointments, guias, fichas, vendas, produtos, selectedDate, setSelectedDate, currentUser, onStatusChange, onMoveProfessional, onNewAppointment, onVenderProduto, onConfirmarChegada, onViewClientProfile, evolucoesPendentes, onRegistrarEvolucao}) {
   // Regra pedida explicitamente pelo usuário: usuário "profissional" (fisioterapeuta) não vê pagamentos/valores.
   const podeVerValores = currentUser?.role !== "fisioterapeuta";
+  // Notificação push real do navegador para evolução pendente (RN pedida explicitamente pelo usuário) —
+  // ver dispararNotificacaoPushNavegador. Precisa de permissão explícita do usuário (gesto de clique).
+  const [statusPush, setStatusPush] = useState(statusPermissaoPush);
+  function ativarNotificacoesPush(){
+    solicitarPermissaoPush().then(setStatusPush);
+  }
   const dragItem = useRef(null);
   const [apptChegadaBiometria, setApptChegadaBiometria] = useState(null);
   const [visao, setVisao] = useState("dia"); // "dia" (kanban) | "semana" (agenda individual por profissional)
@@ -1665,6 +1699,15 @@ function Agenda({professionals, clients, appointments, guias, fichas, vendas, pr
               );
             })}
           </div>
+          {statusPush === "default" && (
+            <div className="flex items-center justify-between gap-2 text-xs bg-orange-100/60 border border-orange-200 rounded-lg px-3 py-2 mt-2">
+              <span>Ative as notificações do navegador para ser avisado de evoluções pendentes mesmo com o PhysioFlow em segundo plano.</span>
+              <button type="button" onClick={ativarNotificacoesPush} className="px-2 py-1 rounded-md bg-orange-600 text-white font-medium hover:bg-orange-700 flex-shrink-0 whitespace-nowrap">Ativar notificações</button>
+            </div>
+          )}
+          {statusPush === "denied" && (
+            <p className="text-[11px] text-orange-700 mt-2">🔕 Notificações do navegador bloqueadas — habilite manualmente nas permissões do site para recebê-las (o aviso continua aparecendo aqui e na aba Notificações).</p>
+          )}
         </div>
       )}
       <div className="bg-gradient-to-r from-teal-600 to-teal-800 text-white rounded-2xl p-5 mb-4 shadow-md">
