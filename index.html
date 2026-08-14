@@ -1181,12 +1181,18 @@ function App({currentUser, onLogout}) {
         const vendedorProf = professionals.find(p => p.nome === currentUser?.nome);
         const percentual = vendedorProf?.comissaoVendaPercentual || 0;
         const comissaoValor = Math.round(valorFinal * percentual) / 100;
+        // Regra pedida explicitamente pelo usuário: parcelas só existem/aparecem quando a forma de
+        // pagamento é cartão de crédito — outras formas ficam sempre à vista (1x), independente do que
+        // tenha ficado selecionado na tela antes de trocar a forma de pagamento.
+        const formaPagamentoVenda = clienteFinal.formaPagamentoProduto || "cartao_credito";
         const venda = {
           id: "v"+Date.now(),
           data: TODAY,
           clienteId, clienteNome: clienteFinal.nome,
           produtoId: produto.id, produtoNome: produto.nome,
-          valorFinal, descontoAplicado: Number(clienteFinal.descontoAplicado)||0, parcelas: Number(clienteFinal.parcelas)||1,
+          valorFinal, descontoAplicado: Number(clienteFinal.descontoAplicado)||0,
+          formaPagamento: formaPagamentoVenda,
+          parcelas: formaPagamentoVenda==="cartao_credito" ? (Number(clienteFinal.parcelas)||1) : 1,
           vendedorId: vendedorProf?.id || null,
           vendedorNome: vendedorProf?.nome || currentUser?.nome || "—",
           comissaoPercentualAplicada: percentual,
@@ -2560,14 +2566,14 @@ function ClientModal({data, abaInicial, professionals, convenios, produtos, fich
               pacoteNome:p.nome,
               sessoesTotal:p.sessoesIncluidas||form.sessoesTotal,
               valorSessao:p.sessoesIncluidas>0 ? Math.round((p.precoBase/p.sessoesIncluidas)*100)/100 : p.precoBase,
-              descontoAplicado:0, parcelas:1,
+              descontoAplicado:0, parcelas:1, formaPagamentoProduto:form.formaPagamentoProduto||"cartao_credito",
             }); setDescontoAutorizado(false); }}
             onClear={()=>{ setForm({...form, produtoId:null}); setDescontoAutorizado(false); }}
           />
         </Field>
         {produtoSelecionado && (
           <>
-            <div className="grid grid-cols-3 gap-x-4 bg-slate-50 rounded-lg p-3 mt-2">
+            <div className="grid grid-cols-4 gap-x-4 bg-slate-50 rounded-lg p-3 mt-2">
               <Field label={`Desconto aplicado (% — faixa ${descontoMin}%–${descontoMax}%)`}>
                 <input type="number" min="0" className={inputCls} value={form.descontoAplicado||0}
                   onChange={e=>{
@@ -2575,11 +2581,27 @@ function ClientModal({data, abaInicial, professionals, convenios, produtos, fich
                     setDescontoAutorizado(false);
                   }} />
               </Field>
-              <Field label={`Parcelas (máx. ${parcelasMax}x)`}>
-                <select className={inputCls} value={form.parcelas||1} onChange={e=>setForm({...form, parcelas:Number(e.target.value)})}>
-                  {Array.from({length:parcelasMax}, (_,i)=>i+1).map(n => <option key={n} value={n}>{n}x</option>)}
+              <Field label="Forma de pagamento">
+                <select className={inputCls} value={form.formaPagamentoProduto||"cartao_credito"} onChange={e=>{
+                  const novaForma = e.target.value;
+                  setForm({...form, formaPagamentoProduto:novaForma, parcelas: novaForma==="cartao_credito" ? (form.parcelas||1) : 1});
+                }}>
+                  {Object.entries(FORMAS_PAGAMENTO).map(([k,label]) => <option key={k} value={k}>{label}</option>)}
                 </select>
               </Field>
+              {/* Regra pedida explicitamente pelo usuário: número de parcelas só faz sentido/aparece
+                  quando a forma de pagamento é cartão de crédito — outras formas ficam "à vista". */}
+              {(form.formaPagamentoProduto||"cartao_credito")==="cartao_credito" ? (
+                <Field label={`Parcelas (máx. ${parcelasMax}x)`}>
+                  <select className={inputCls} value={form.parcelas||1} onChange={e=>setForm({...form, parcelas:Number(e.target.value)})}>
+                    {Array.from({length:parcelasMax}, (_,i)=>i+1).map(n => <option key={n} value={n}>{n}x</option>)}
+                  </select>
+                </Field>
+              ) : (
+                <Field label="Parcelas">
+                  <div className="px-3 py-2 text-sm text-slate-400">À vista</div>
+                </Field>
+              )}
               <Field label="Valor final">
                 <div className="px-3 py-2 text-sm font-semibold text-teal-700">{fmtBRL(valorFinalProduto)}</div>
               </Field>
@@ -5210,14 +5232,18 @@ function VendasPanel({vendas, professionals}) {
       <div className="bg-white rounded-xl border border-slate-200 p-4">
         <div className="text-sm font-medium text-slate-700 mb-2">Vendas individuais</div>
         <table className="w-full text-sm">
-          <thead className="text-xs text-slate-400 uppercase"><tr><th className="text-left py-1">Data</th><th className="text-left py-1">Cliente</th><th className="text-left py-1">Produto/pacote</th><th className="text-left py-1">Vendedor</th><th className="text-right py-1">Valor</th><th className="text-right py-1">%</th><th className="text-right py-1">Comissão</th></tr></thead>
+          <thead className="text-xs text-slate-400 uppercase"><tr><th className="text-left py-1">Data</th><th className="text-left py-1">Cliente</th><th className="text-left py-1">Produto/pacote</th><th className="text-left py-1">Forma</th><th className="text-left py-1">Parcelas</th><th className="text-left py-1">Vendedor</th><th className="text-right py-1">Valor</th><th className="text-right py-1">%</th><th className="text-right py-1">Comissão</th></tr></thead>
           <tbody>
-            {vendasFiltradas.length===0 && <tr><td colSpan="7" className="py-3 text-slate-400 text-center">Nenhuma venda no período.</td></tr>}
+            {vendasFiltradas.length===0 && <tr><td colSpan="9" className="py-3 text-slate-400 text-center">Nenhuma venda no período.</td></tr>}
             {vendasFiltradas.map(v => (
               <tr key={v.id} className="border-t border-slate-100">
                 <td className="py-1.5">{fmtDataBR(v.data)}</td>
                 <td className="py-1.5">{v.clienteNome}</td>
                 <td className="py-1.5 text-slate-600">{v.produtoNome}</td>
+                <td className="py-1.5 text-slate-500">{FORMAS_PAGAMENTO[v.formaPagamento] || "—"}</td>
+                {/* Regra pedida explicitamente pelo usuário: número de parcelas só aparece quando a
+                    venda foi no cartão de crédito — outras formas mostram "À vista". */}
+                <td className="py-1.5 text-slate-500">{v.formaPagamento==="cartao_credito" ? `${v.parcelas||1}x` : "À vista"}</td>
                 <td className="py-1.5">{v.vendedorNome}</td>
                 <td className="py-1.5 text-right font-medium">{fmtBRL(v.valorFinal)}</td>
                 <td className="py-1.5 text-right text-slate-500">{v.comissaoPercentualAplicada}%</td>
