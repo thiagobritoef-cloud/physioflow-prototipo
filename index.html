@@ -934,10 +934,17 @@ function App({currentUser, onLogout}) {
   }
 
   function saveGuia(form){
+    const guiaAnterior = guias.find(g=>g.id===form.id);
     setGuias(list => {
       const exists = list.some(g=>g.id===form.id);
       return exists ? list.map(g=>g.id===form.id?form:g) : [...list, {...form, id:"g"+Date.now()}];
     });
+    // Transição para "paga" (RN pedida explicitamente pelo usuário): dispara o lançamento no caixa na
+    // data de pagamento informada no formulário. Só dispara na transição (evita duplicar lançamento se o
+    // usuário só editar outro campo de uma guia que já estava paga).
+    if (form.status === "paga" && guiaAnterior?.status !== "paga") {
+      registrarRecebimentoGuia(form);
+    }
     setModal(null);
   }
 
@@ -948,9 +955,14 @@ function App({currentUser, onLogout}) {
   }
 
   function marcarGuiaPaga(guiaId){
-    setGuias(list => list.map(g => g.id===guiaId ? {...g, status:"paga", valorGlosa:0, motivoGlosa:"", dataPagamento: g.dataPagamento || TODAY} : g));
-    const guia = guias.find(g=>g.id===guiaId);
-    if (guia) pushLog("Interno", `Guia ${guia.numeroGuia} paga pelo convênio — lançada no Financeiro.`);
+    const guiaAnterior = guias.find(g=>g.id===guiaId);
+    if (!guiaAnterior) return;
+    const dataPag = guiaAnterior.dataPagamento || TODAY;
+    const guiaAtualizada = {...guiaAnterior, status:"paga", valorGlosa:0, motivoGlosa:"", dataPagamento: dataPag};
+    setGuias(list => list.map(g => g.id===guiaId ? guiaAtualizada : g));
+    // RN pedida explicitamente pelo usuário: guia paga entra no Fluxo de Caixa na data do pagamento.
+    // Só dispara na transição (evita duplicar lançamento se a guia já estava paga).
+    if (guiaAnterior.status !== "paga") registrarRecebimentoGuia(guiaAtualizada);
   }
 
   function registrarGlosa(guiaId, tipo, valor, motivo){
@@ -1008,6 +1020,23 @@ function App({currentUser, onLogout}) {
     setModal(null);
   }
 
+  // Venda avulsa pelo card da Agenda (RN pedida explicitamente pelo usuário: toda venda — produto,
+  // serviço ou programa — deve ser lançada tanto no Fluxo de Caixa quanto na aba Vendas, com comissão).
+  // Antes esse caminho só criava o lançamento de caixa via addLancamento; agora passa pelo mesmo helper
+  // `registrarVenda` usado pelo vínculo de produto no cadastro do cliente, já com os campos que a tela
+  // de venda avulsa coleta (unidade, forma de pagamento, origem, desconto e parcelas).
+  function venderProdutoAvulso(form){
+    const { _overrideDesconto, produtoId, produtoNome, clienteId, clienteNome, quantidade, descontoAplicado, parcelas, formaPagamento, origemPagamento, unidadeId, data, valor } = form;
+    if (_overrideDesconto) {
+      pushLog("Override", `Desconto de ${_overrideDesconto.desconto}% em "${_overrideDesconto.produtoNome}" está fora da faixa permitida (${_overrideDesconto.min}%–${_overrideDesconto.max}%) — autorizado pelo gestor na venda avulsa (Agenda).`);
+    }
+    const venda = registrarVenda({
+      clienteId, clienteNome, produto: { id: produtoId, nome: produtoNome },
+      quantidade, valorFinal: valor, descontoAplicado, formaPagamento, origemPagamento, parcelas, unidadeId, data,
+    }, { bloquearSeFechado: true });
+    if (venda) setModal(null);
+  }
+
   function fecharCaixa(data, valorFisicoContado, valorSistema){
     const diferenca = valorFisicoContado - valorSistema;
     setFechamentos(f => ({...f, [data]: { valorFisico: valorFisicoContado, valorSistema, diferenca, ts: "agora" }}));
@@ -1018,6 +1047,77 @@ function App({currentUser, onLogout}) {
     if (!window.confirm(`Reabrir o caixa de ${fmtDataBR(data)}? Esta ação deve ser feita apenas por um administrador.`)) return;
     setFechamentos(f => { const n = {...f}; delete n[data]; return n; });
     pushLog("Interno", `Caixa de ${fmtDataBR(data)} reaberto manualmente (ação administrativa).`);
+  }
+
+  // Vendas + Caixa unificados (RN pedida explicitamente pelo usuário: "ao realizar uma venda, seja de
+  // produtos ou de serviços ou programas, deve ser lançado diretamente no fluxo de caixa e na aba
+  // vendas"). Função central usada pelos três caminhos que podem gerar uma venda: produto vinculado ao
+  // cadastro do cliente (saveClient), sugestão automática de produto na Agenda (vincularProdutoAoCliente)
+  // e venda avulsa pelo card da Agenda (venderProdutoAvulso). Antes só o primeiro caminho gerava venda
+  // (aba Vendas/comissão) e só o terceiro gerava lançamento de caixa — ficavam desencontrados.
+  function registrarVenda(params, opts={}){
+    const { clienteId, clienteNome, produto, quantidade=1, valorFinal, descontoAplicado=0, formaPagamento, origemPagamento, parcelas, unidadeId, data } = params;
+    const dataVenda = data || TODAY;
+    if (opts.bloquearSeFechado && fechamentos[dataVenda]) {
+      alert("O caixa deste dia já está fechado. Reabra o caixa para lançar novos itens.");
+      return null;
+    }
+    const vendedorProf = professionals.find(p => p.nome === currentUser?.nome);
+    const percentual = vendedorProf?.comissaoVendaPercentual || 0;
+    const comissaoValor = Math.round(valorFinal * percentual) / 100;
+    const formaFinal = formaPagamento || "dinheiro";
+    const parcelasFinal = formaFinal === "cartao_credito" ? (Number(parcelas)||1) : 1;
+    const venda = {
+      id: "v"+Date.now(), data: dataVenda,
+      clienteId, clienteNome,
+      produtoId: produto.id, produtoNome: produto.nome,
+      valorFinal, descontoAplicado: Number(descontoAplicado)||0,
+      formaPagamento: formaFinal, parcelas: parcelasFinal,
+      vendedorId: vendedorProf?.id || null,
+      vendedorNome: vendedorProf?.nome || currentUser?.nome || "—",
+      comissaoPercentualAplicada: percentual,
+      comissaoValor,
+    };
+    setVendas(list => [...list, venda]);
+    const caixaFechado = !!fechamentos[dataVenda];
+    if (!caixaFechado) {
+      const unidadeFinal = unidadeId || unidadePadraoParaProfissional(vendedorProf?.id);
+      setLancamentos(list => [...list, {
+        id: "l"+Date.now(), data: dataVenda, unidadeId: unidadeFinal, tipo: "receita",
+        formaPagamento: formaFinal, origemPagamento: origemPagamento || "particular",
+        valor: valorFinal,
+        descricao: `Venda: ${produto.nome}${quantidade>1?` (${quantidade}x)`:""} — ${clienteNome}`,
+      }]);
+      pushLog("Interno", `Venda registrada: "${produto.nome}" para ${clienteNome} por ${venda.vendedorNome} (${fmtBRL(valorFinal)}${percentual>0 ? `, comissão ${fmtBRL(comissaoValor)}` : ""}) — lançada no Fluxo de Caixa (${FORMAS_PAGAMENTO[formaFinal]||formaFinal}).`);
+    } else {
+      pushLog("Interno", `Venda registrada: "${produto.nome}" para ${clienteNome} por ${venda.vendedorNome} (${fmtBRL(valorFinal)}${percentual>0 ? `, comissão ${fmtBRL(comissaoValor)}` : ""}). Caixa de ${fmtDataBR(dataVenda)} já está fechado — lance manualmente no Fluxo de Caixa após reabrir.`);
+    }
+    return venda;
+  }
+
+  // Guias de convênio pagas entram no Fluxo de Caixa (RN pedida explicitamente pelo usuário), lançadas na
+  // DATA DO PAGAMENTO (não na data de hoje) — assim o caixa reflete corretamente quando o dinheiro entrou,
+  // mesmo que o registro do pagamento no sistema seja feito depois. Valor = valorGuiaPendente (preço do
+  // procedimento TUSS pelo convênio × sessões autorizadas, menos glosa), mesmo cálculo já usado no
+  // Dashboard/GuiasResumo para "valor recebido".
+  function registrarRecebimentoGuia(guia){
+    const dataRecebimento = guia.dataPagamento || TODAY;
+    const valor = valorGuiaPendente(guia, procedimentosTuss, convenios);
+    const cliente = clients.find(c=>c.id===guia.clienteId);
+    if (valor <= 0) {
+      pushLog("Interno", `Guia ${guia.numeroGuia} (${guia.convenio}) marcada como paga, mas sem valor líquido a receber (glosa total) — nada lançado no Fluxo de Caixa.`);
+      return;
+    }
+    if (fechamentos[dataRecebimento]) {
+      pushLog("Interno", `Guia ${guia.numeroGuia} (${guia.convenio}) paga (${fmtBRL(valor)}), mas o caixa de ${fmtDataBR(dataRecebimento)} já está fechado — lance manualmente no Fluxo de Caixa após reabrir.`);
+      return;
+    }
+    setLancamentos(list => [...list, {
+      id: "l"+Date.now(), data: dataRecebimento, unidadeId: guia.unidadePrestadoraId || unidades[0]?.id || "",
+      tipo: "receita", formaPagamento: "transferencia", origemPagamento: "convenio",
+      valor, descricao: `Recebimento guia ${guia.numeroGuia} — ${guia.convenio}${cliente ? ` (${cliente.nome})` : ""}`,
+    }]);
+    pushLog("Interno", `Guia ${guia.numeroGuia} (${guia.convenio}) paga — ${fmtBRL(valor)} lançado no Fluxo de Caixa em ${fmtDataBR(dataRecebimento)}.`);
   }
 
   /* ---- Fichas de avaliação ---- */
@@ -1137,15 +1237,25 @@ function App({currentUser, onLogout}) {
   // modal de agendamento — usado quando o profissional escolhido tem uma especialidade com produto
   // cadastrado no Catálogo e o cliente ainda não tem esse produto vinculado (o usuário pode ignorar).
   function vincularProdutoAoCliente(clienteId, produto){
+    const cliente = clients.find(c=>c.id===clienteId);
     setClients(list => list.map(c => c.id===clienteId ? {
       ...c,
       produtoId: produto.id,
       pacoteNome: produto.nome,
       sessoesTotal: produto.sessoesIncluidas || c.sessoesTotal,
       valorSessao: produto.sessoesIncluidas>0 ? Math.round((produto.precoBase/produto.sessoesIncluidas)*100)/100 : produto.precoBase,
-      descontoAplicado: 0, parcelas: 1,
+      descontoAplicado: 0, parcelas: 1, formaPagamentoProduto: "dinheiro",
     } : c));
-    pushLog("Interno", `Produto "${produto.nome}" vinculado ao cliente via sugestão de especialidade na Agenda.`);
+    // RN pedida explicitamente pelo usuário: essa vinculação também é uma venda — antes só o vínculo
+    // feito dentro do ClientModal contava. Sem tela própria de preço/forma de pagamento aqui (é um
+    // atalho de um clique), assume preço cheio do produto (sem desconto), à vista em dinheiro.
+    if (cliente) {
+      registrarVenda({
+        clienteId, clienteNome: cliente.nome, produto, valorFinal: produto.precoBase, descontoAplicado: 0,
+        formaPagamento: "dinheiro", parcelas: 1,
+        origemPagamento: cliente.pagamento?.tipo==="convenio" ? "convenio" : "particular",
+      });
+    }
   }
 
   // Vendas (RN pedida pelo usuário): toda vez que um produto/pacote é vinculado ao cadastro do
@@ -1176,30 +1286,17 @@ function App({currentUser, onLogout}) {
       const produto = produtoVinculado;
       if (produto) {
         const valorFinal = Math.round(produto.precoBase * (1 - (Number(clienteFinal.descontoAplicado)||0)/100) * 100) / 100;
-        // Vínculo do atendente logado ao seu cadastro de colaborador é feito por nome (mesma convenção
-        // já usada em outros pontos do sistema, ex.: agenda por profissional/ponto eletrônico).
-        const vendedorProf = professionals.find(p => p.nome === currentUser?.nome);
-        const percentual = vendedorProf?.comissaoVendaPercentual || 0;
-        const comissaoValor = Math.round(valorFinal * percentual) / 100;
         // Regra pedida explicitamente pelo usuário: parcelas só existem/aparecem quando a forma de
-        // pagamento é cartão de crédito — outras formas ficam sempre à vista (1x), independente do que
-        // tenha ficado selecionado na tela antes de trocar a forma de pagamento.
-        const formaPagamentoVenda = clienteFinal.formaPagamentoProduto || "cartao_credito";
-        const venda = {
-          id: "v"+Date.now(),
-          data: TODAY,
-          clienteId, clienteNome: clienteFinal.nome,
-          produtoId: produto.id, produtoNome: produto.nome,
-          valorFinal, descontoAplicado: Number(clienteFinal.descontoAplicado)||0,
-          formaPagamento: formaPagamentoVenda,
-          parcelas: formaPagamentoVenda==="cartao_credito" ? (Number(clienteFinal.parcelas)||1) : 1,
-          vendedorId: vendedorProf?.id || null,
-          vendedorNome: vendedorProf?.nome || currentUser?.nome || "—",
-          comissaoPercentualAplicada: percentual,
-          comissaoValor,
-        };
-        setVendas(list => [...list, venda]);
-        pushLog("Interno", `Venda registrada: "${produto.nome}" para ${clienteFinal.nome} por ${venda.vendedorNome} (${fmtBRL(valorFinal)}${percentual>0 ? `, comissão ${fmtBRL(comissaoValor)}` : ""}).`);
+        // pagamento é cartão de crédito — outras formas ficam sempre à vista (1x). A criação da venda E
+        // do lançamento correspondente no Fluxo de Caixa agora passa pelo helper único `registrarVenda`
+        // (ver definição perto das funções de Caixa) — antes só era criada a venda, sem lançar no caixa.
+        registrarVenda({
+          clienteId, clienteNome: clienteFinal.nome, produto, valorFinal,
+          descontoAplicado: clienteFinal.descontoAplicado,
+          formaPagamento: clienteFinal.formaPagamentoProduto || "cartao_credito",
+          origemPagamento: clienteFinal.pagamento?.tipo==="convenio" ? "convenio" : "particular",
+          parcelas: clienteFinal.parcelas,
+        });
       }
     }
     setModal(null);
@@ -1519,7 +1616,7 @@ function App({currentUser, onLogout}) {
         <LancamentoModal data={modal.data} unidades={unidades} onClose={()=>setModal(null)} onSave={addLancamento} />
       )}
       {modal?.type === "venderProduto" && (
-        <VenderProdutoModal data={modal.data} produtos={produtos} clients={clients} currentUser={currentUser} onClose={()=>setModal(null)} onSave={addLancamento} />
+        <VenderProdutoModal data={modal.data} produtos={produtos} clients={clients} currentUser={currentUser} onClose={()=>setModal(null)} onSave={venderProdutoAvulso} />
       )}
       {modal?.type === "ficha" && (
         <FichaModal data={modal.data} clients={clients} professionals={professionals} modelosFicha={modelosFicha}
@@ -5420,6 +5517,7 @@ function VenderProdutoModal({data, produtos, clients, currentUser, onClose, onSa
   const [quantidade, setQuantidade] = useState(1);
   const [desconto, setDesconto] = useState(0);
   const [formaPagamento, setFormaPagamento] = useState("dinheiro");
+  const [parcelas, setParcelas] = useState(1);
   const [origemPagamento, setOrigemPagamento] = useState(cliente?.pagamento?.tipo === "convenio" ? "convenio" : "particular");
   const [descontoAutorizado, setDescontoAutorizado] = useState(false);
   const [modalAutorizarDesconto, setModalAutorizarDesconto] = useState(false);
@@ -5427,6 +5525,7 @@ function VenderProdutoModal({data, produtos, clients, currentUser, onClose, onSa
   const produto = produtosAtivos.find(p=>p.id===produtoId);
   const descontoMin = produto?.descontoMinimoPercent || 0;
   const descontoMax = produto?.descontoMaximoPercent || 0;
+  const parcelasMax = produto?.parcelasMaximas || 1;
   const valorBruto = (produto?.precoBase||0) * quantidade;
   const valorFinal = valorBruto * (1 - (Number(desconto)||0)/100);
   const descontoForaDaFaixa = !!produto && ((Number(desconto)||0) > descontoMax || (Number(desconto)||0) < descontoMin);
@@ -5441,6 +5540,11 @@ function VenderProdutoModal({data, produtos, clients, currentUser, onClose, onSa
       origemPagamento,
       valor: Number(valorFinal.toFixed(2)),
       descricao: `Venda: ${produto.nome}${quantidade>1?` (${quantidade}x)`:""} — ${cliente?.nome || "Cliente"}`,
+      // Campos extras (RN pedida explicitamente pelo usuário: venda avulsa também deve gerar registro na
+      // aba Vendas, com comissão) — usados pelo App para criar a venda além do lançamento de caixa.
+      produtoId: produto.id, produtoNome: produto.nome,
+      clienteId: cliente?.id || null, clienteNome: cliente?.nome || "Cliente",
+      quantidade, descontoAplicado: Number(desconto)||0, parcelas,
       // Campo transiente (removido pelo App antes de persistir o lançamento) — só existe para o App
       // registrar no log de auditoria quando o desconto ficou fora da faixa mín.–máx. do produto.
       _overrideDesconto: descontoForaDaFaixa ? { produtoNome: produto.nome, desconto: Number(desconto)||0, min: descontoMin, max: descontoMax } : null,
@@ -5484,10 +5588,18 @@ function VenderProdutoModal({data, produtos, clients, currentUser, onClose, onSa
             </select>
           </Field>
           <Field label="Forma de pagamento">
-            <select className={inputCls} value={formaPagamento} onChange={e=>setFormaPagamento(e.target.value)}>
+            <select className={inputCls} value={formaPagamento} onChange={e=>{ setFormaPagamento(e.target.value); if (e.target.value!=="cartao_credito") setParcelas(1); }}>
               {Object.entries(FORMAS_PAGAMENTO).map(([k,label]) => <option key={k} value={k}>{label}</option>)}
             </select>
           </Field>
+          {/* Regra pedida explicitamente pelo usuário: número de parcelas só aparece no cartão de crédito. */}
+          {formaPagamento==="cartao_credito" && (
+            <Field label={`Parcelas (máx. ${parcelasMax}x)`}>
+              <select className={inputCls} value={parcelas} onChange={e=>setParcelas(Number(e.target.value))}>
+                {Array.from({length:parcelasMax}, (_,i)=>i+1).map(n => <option key={n} value={n}>{n}x</option>)}
+              </select>
+            </Field>
+          )}
           <div className="bg-slate-50 rounded-lg p-3 text-sm text-slate-700 my-2">Total: <strong>{fmtBRL(valorFinal)}</strong></div>
         </>
       )}
