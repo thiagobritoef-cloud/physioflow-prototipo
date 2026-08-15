@@ -1095,6 +1095,9 @@ function App({currentUser, onLogout}) {
         formaPagamento: formaFinal, origemPagamento: origemPagamento || "particular",
         valor: valorFinal,
         descricao: `Venda: ${produto.nome}${quantidade>1?` (${quantidade}x)`:""} — ${clienteNome}`,
+        // Nome do paciente/cliente que pagou (pedido explicitamente pelo usuário: mostrar quem pagou,
+        // seja particular ou convênio, tanto no Fluxo de Caixa quanto nas Vendas).
+        clienteId: clienteId || null, clienteNome: clienteNome || null,
       }]);
       pushLog("Interno", `Venda registrada: "${produto.nome}" para ${clienteNome} por ${venda.vendedorNome} (${fmtBRL(valorFinal)}${percentual>0 ? `, comissão ${fmtBRL(comissaoValor)}` : ""}) — lançada no Fluxo de Caixa (${FORMAS_PAGAMENTO[formaFinal]||formaFinal}).`);
     } else {
@@ -1124,6 +1127,9 @@ function App({currentUser, onLogout}) {
       id: "l"+Date.now(), data: dataRecebimento, unidadeId: guia.unidadePrestadoraId || unidades[0]?.id || "",
       tipo: "receita", formaPagamento: "transferencia", origemPagamento: "convenio",
       valor, descricao: `Recebimento guia ${guia.numeroGuia} — ${guia.convenio}${cliente ? ` (${cliente.nome})` : ""}`,
+      // Nome do paciente vinculado à guia (pedido explicitamente pelo usuário: mostrar quem pagou,
+      // seja particular ou convênio, tanto no Fluxo de Caixa quanto nas Vendas).
+      clienteId: guia.clienteId || null, clienteNome: cliente?.nome || null,
     }]);
     pushLog("Interno", `Guia ${guia.numeroGuia} (${guia.convenio}) paga — ${fmtBRL(valor)} lançado no Fluxo de Caixa em ${fmtDataBR(dataRecebimento)}.`);
   }
@@ -1622,7 +1628,7 @@ function App({currentUser, onLogout}) {
         <GlosaModal guia={modal.data} onClose={()=>setModal(null)} onSave={registrarGlosa} />
       )}
       {modal?.type === "lancamento" && (
-        <LancamentoModal data={modal.data} unidades={unidades} onClose={()=>setModal(null)} onSave={addLancamento} />
+        <LancamentoModal data={modal.data} unidades={unidades} clients={clients} onClose={()=>setModal(null)} onSave={addLancamento} />
       )}
       {modal?.type === "venderProduto" && (
         <VenderProdutoModal data={modal.data} produtos={produtos} clients={clients} currentUser={currentUser} onClose={()=>setModal(null)} onSave={venderProdutoAvulso} />
@@ -5427,15 +5433,16 @@ function CaixaPanel({lancamentos, fechamentos, onNew, onEdit, onFechar, onReabri
       <div className="bg-white rounded-xl border border-slate-200 overflow-x-auto mb-4">
         <table className="w-full text-sm">
           <thead className="bg-slate-50 text-slate-500 text-xs uppercase">
-            <tr><th className="text-left px-4 py-2">Tipo</th><th className="text-left px-4 py-2">Origem</th><th className="text-left px-4 py-2">Forma</th><th className="text-left px-4 py-2">Descrição</th><th className="text-right px-4 py-2">Valor</th><th className="text-right px-4 py-2">Ações</th></tr>
+            <tr><th className="text-left px-4 py-2">Tipo</th><th className="text-left px-4 py-2">Paciente</th><th className="text-left px-4 py-2">Origem</th><th className="text-left px-4 py-2">Forma</th><th className="text-left px-4 py-2">Descrição</th><th className="text-right px-4 py-2">Valor</th><th className="text-right px-4 py-2">Ações</th></tr>
           </thead>
           <tbody>
-            {calc.doDia.length===0 && <tr><td colSpan="6" className="text-center py-4 text-slate-400">Nenhum lançamento neste dia.</td></tr>}
+            {calc.doDia.length===0 && <tr><td colSpan="7" className="text-center py-4 text-slate-400">Nenhum lançamento neste dia.</td></tr>}
             {calc.doDia.map(l => {
               const cfg = TIPO_LANCAMENTO[l.tipo];
               return (
                 <tr key={l.id} className="border-t border-slate-100">
                   <td className="px-4 py-2"><span className={"text-xs font-medium rounded-full px-2 py-1 " + cfg.badge}>{cfg.label}</span></td>
+                  <td className="px-4 py-2 text-slate-600">{l.clienteNome || "—"}</td>
                   <td className="px-4 py-2 text-slate-500">{l.tipo==="receita" ? (ORIGENS_PAGAMENTO[l.origemPagamento] || "—") : "—"}</td>
                   <td className="px-4 py-2 text-slate-500">{FORMAS_PAGAMENTO[l.formaPagamento] || "—"}</td>
                   <td className="px-4 py-2 text-slate-600">{l.descricao}</td>
@@ -5481,7 +5488,7 @@ function CaixaPanel({lancamentos, fechamentos, onNew, onEdit, onFechar, onReabri
   );
 }
 
-function LancamentoModal({data, unidades, onClose, onSave}) {
+function LancamentoModal({data, unidades, clients, onClose, onSave}) {
   const [form, setForm] = useState({ unidadeId: unidades?.[0]?.id||"", origemPagamento: "particular", ...data });
   const precisaForma = form.tipo === "receita" || form.tipo === "despesa";
   const ehReceita = form.tipo === "receita";
@@ -5515,6 +5522,15 @@ function LancamentoModal({data, unidades, onClose, onSave}) {
           </select>
         </Field>
       )}
+      {/* Paciente que fez o pagamento (pedido explicitamente pelo usuário: mostrar quem pagou, seja
+          particular ou convênio, tanto no Fluxo de Caixa quanto nas Vendas). Opcional — nem todo
+          lançamento manual de receita está necessariamente ligado a um paciente específico. */}
+      {ehReceita && (clients?.length > 0) && (
+        <SearchSelect label="Paciente (opcional)" placeholder="Buscar paciente..."
+          items={clients} getLabel={c=>c.nome} value={form.clienteId||""}
+          onSelect={c=>setForm({...form, clienteId:c.id, clienteNome:c.nome})}
+          onClear={()=>setForm({...form, clienteId:null, clienteNome:null})} />
+      )}
       {precisaForma && (
         <Field label="Forma de pagamento">
           <select className={inputCls} value={form.formaPagamento} onChange={e=>setForm({...form,formaPagamento:e.target.value})}>
@@ -5526,7 +5542,7 @@ function LancamentoModal({data, unidades, onClose, onSave}) {
       <Field label="Descrição"><input className={inputCls} value={form.descricao} onChange={e=>setForm({...form,descricao:e.target.value})} /></Field>
       <div className="flex justify-end gap-2 mt-4">
         <button onClick={onClose} className="px-4 py-2 text-sm rounded-lg border border-slate-300">Cancelar</button>
-        <button onClick={()=>onSave({...form, formaPagamento: precisaForma ? form.formaPagamento : "dinheiro", origemPagamento: ehReceita ? (form.origemPagamento||"particular") : null})} className="px-4 py-2 text-sm rounded-lg bg-teal-600 text-white hover:bg-teal-700">{ehEdicao ? "Salvar alterações" : "Lançar"}</button>
+        <button onClick={()=>onSave({...form, formaPagamento: precisaForma ? form.formaPagamento : "dinheiro", origemPagamento: ehReceita ? (form.origemPagamento||"particular") : null, clienteId: ehReceita ? (form.clienteId||null) : null, clienteNome: ehReceita ? (form.clienteNome||null) : null})} className="px-4 py-2 text-sm rounded-lg bg-teal-600 text-white hover:bg-teal-700">{ehEdicao ? "Salvar alterações" : "Lançar"}</button>
       </div>
     </Modal>
   );
