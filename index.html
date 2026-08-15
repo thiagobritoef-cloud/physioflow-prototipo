@@ -1008,6 +1008,9 @@ function App({currentUser, onLogout}) {
   }
 
   /* ---- Fluxo de caixa ---- */
+  // Cria OU edita um lançamento manual de caixa. Quando `form.id` já existe (veio de um clique em
+  // "Editar" na tabela de lançamentos), atualiza o registro existente em vez de criar um novo — RN
+  // pedida explicitamente pelo usuário: permitir editar entradas e saídas do Fluxo de Caixa.
   function addLancamento(form){
     if (fechamentos[form.data]) { alert("O caixa deste dia já está fechado. Reabra o caixa para lançar novos itens."); return; }
     // `_overrideDesconto` é um campo transiente vindo do VenderProdutoModal (venda avulsa na Agenda) —
@@ -1016,7 +1019,12 @@ function App({currentUser, onLogout}) {
     if (_overrideDesconto) {
       pushLog("Override", `Desconto de ${_overrideDesconto.desconto}% em "${_overrideDesconto.produtoNome}" está fora da faixa permitida (${_overrideDesconto.min}%–${_overrideDesconto.max}%) — autorizado pelo gestor na venda avulsa (Agenda).`);
     }
-    setLancamentos(list => [...list, {...lancamento, id:"l"+Date.now()}]);
+    if (lancamento.id) {
+      setLancamentos(list => list.map(l => l.id===lancamento.id ? {...lancamento} : l));
+      pushLog("Interno", `Lançamento de caixa editado: ${TIPO_LANCAMENTO[lancamento.tipo]?.label || lancamento.tipo} de ${fmtBRL(lancamento.valor)} em ${fmtDataBR(lancamento.data)} — "${lancamento.descricao}".`);
+    } else {
+      setLancamentos(list => [...list, {...lancamento, id:"l"+Date.now()}]);
+    }
     setModal(null);
   }
 
@@ -1545,6 +1553,7 @@ function App({currentUser, onLogout}) {
         {tab === "caixa" && (
           <CaixaPanel lancamentos={lancamentosNaUnidade} fechamentos={fechamentos}
             onNew={(data)=>setModal({type:"lancamento", data:{data, tipo:"receita", formaPagamento:"dinheiro", origemPagamento:"particular", valor:0, descricao:"", unidadeId: unidadeFiltro!=="todas"?unidadeFiltro:(unidades[0]?.id||"")}})}
+            onEdit={(l)=>setModal({type:"lancamento", data:{...l}})}
             onFechar={fecharCaixa} onReabrir={reabrirCaixa}
           />
         )}
@@ -5355,7 +5364,7 @@ function VendasPanel({vendas, professionals}) {
   );
 }
 
-function CaixaPanel({lancamentos, fechamentos, onNew, onFechar, onReabrir}) {
+function CaixaPanel({lancamentos, fechamentos, onNew, onEdit, onFechar, onReabrir}) {
   const [data, setData] = useState(TODAY);
   const [valorContado, setValorContado] = useState("");
   const calc = useMemo(() => calcCaixaDia(lancamentos, data), [lancamentos, data]);
@@ -5418,10 +5427,10 @@ function CaixaPanel({lancamentos, fechamentos, onNew, onFechar, onReabrir}) {
       <div className="bg-white rounded-xl border border-slate-200 overflow-x-auto mb-4">
         <table className="w-full text-sm">
           <thead className="bg-slate-50 text-slate-500 text-xs uppercase">
-            <tr><th className="text-left px-4 py-2">Tipo</th><th className="text-left px-4 py-2">Origem</th><th className="text-left px-4 py-2">Forma</th><th className="text-left px-4 py-2">Descrição</th><th className="text-right px-4 py-2">Valor</th></tr>
+            <tr><th className="text-left px-4 py-2">Tipo</th><th className="text-left px-4 py-2">Origem</th><th className="text-left px-4 py-2">Forma</th><th className="text-left px-4 py-2">Descrição</th><th className="text-right px-4 py-2">Valor</th><th className="text-right px-4 py-2">Ações</th></tr>
           </thead>
           <tbody>
-            {calc.doDia.length===0 && <tr><td colSpan="5" className="text-center py-4 text-slate-400">Nenhum lançamento neste dia.</td></tr>}
+            {calc.doDia.length===0 && <tr><td colSpan="6" className="text-center py-4 text-slate-400">Nenhum lançamento neste dia.</td></tr>}
             {calc.doDia.map(l => {
               const cfg = TIPO_LANCAMENTO[l.tipo];
               return (
@@ -5431,6 +5440,9 @@ function CaixaPanel({lancamentos, fechamentos, onNew, onFechar, onReabrir}) {
                   <td className="px-4 py-2 text-slate-500">{FORMAS_PAGAMENTO[l.formaPagamento] || "—"}</td>
                   <td className="px-4 py-2 text-slate-600">{l.descricao}</td>
                   <td className={"px-4 py-2 text-right font-medium " + (cfg.sinal>0?"text-green-600":"text-red-600")}>{cfg.sinal>0?"+":"−"}{fmtBRL(l.valor)}</td>
+                  <td className="px-4 py-2 text-right">
+                    {!fechado && <button onClick={()=>onEdit(l)} className="text-teal-600 text-xs font-medium hover:underline">Editar</button>}
+                  </td>
                 </tr>
               );
             })}
@@ -5473,8 +5485,18 @@ function LancamentoModal({data, unidades, onClose, onSave}) {
   const [form, setForm] = useState({ unidadeId: unidades?.[0]?.id||"", origemPagamento: "particular", ...data });
   const precisaForma = form.tipo === "receita" || form.tipo === "despesa";
   const ehReceita = form.tipo === "receita";
+  const ehEdicao = !!data.id;
+  // Lançamentos gerados automaticamente por uma venda ou pelo recebimento de guia (descrição começa com
+  // "Venda:" ou "Recebimento guia") não têm vínculo de volta ao registro de origem — editar aqui NÃO
+  // atualiza a aba Vendas nem a guia correspondente, só o lançamento de caixa em si.
+  const ehAutoGerado = ehEdicao && /^(Venda:|Recebimento guia)/.test(data.descricao || "");
   return (
-    <Modal title="Novo lançamento de caixa" onClose={onClose}>
+    <Modal title={ehEdicao ? "Editar lançamento de caixa" : "Novo lançamento de caixa"} onClose={onClose}>
+      {ehAutoGerado && (
+        <div className="bg-amber-50 border border-amber-200 text-amber-800 text-xs rounded-lg p-3 mb-3">
+          Este lançamento foi gerado automaticamente por uma venda ou recebimento de guia. Editar aqui altera só o Fluxo de Caixa — não atualiza a aba Vendas nem a guia de origem.
+        </div>
+      )}
       <Field label="Data"><DateInput value={form.data} onChange={v=>setForm({...form,data:v})} /></Field>
       <Field label="Unidade">
         <select className={inputCls} value={form.unidadeId||""} onChange={e=>setForm({...form,unidadeId:e.target.value})}>
@@ -5504,7 +5526,7 @@ function LancamentoModal({data, unidades, onClose, onSave}) {
       <Field label="Descrição"><input className={inputCls} value={form.descricao} onChange={e=>setForm({...form,descricao:e.target.value})} /></Field>
       <div className="flex justify-end gap-2 mt-4">
         <button onClick={onClose} className="px-4 py-2 text-sm rounded-lg border border-slate-300">Cancelar</button>
-        <button onClick={()=>onSave({...form, formaPagamento: precisaForma ? form.formaPagamento : "dinheiro", origemPagamento: ehReceita ? (form.origemPagamento||"particular") : null})} className="px-4 py-2 text-sm rounded-lg bg-teal-600 text-white hover:bg-teal-700">Lançar</button>
+        <button onClick={()=>onSave({...form, formaPagamento: precisaForma ? form.formaPagamento : "dinheiro", origemPagamento: ehReceita ? (form.origemPagamento||"particular") : null})} className="px-4 py-2 text-sm rounded-lg bg-teal-600 text-white hover:bg-teal-700">{ehEdicao ? "Salvar alterações" : "Lançar"}</button>
       </div>
     </Modal>
   );
