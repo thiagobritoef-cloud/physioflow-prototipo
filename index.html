@@ -462,10 +462,10 @@ function solicitarPermissaoPush(){
   if (Notification.permission !== "default") return Promise.resolve(Notification.permission);
   return Notification.requestPermission();
 }
-function dispararNotificacaoPushNavegador(titulo, corpo){
+function dispararNotificacaoPushNavegador(titulo, corpo, tag){
   if (typeof Notification === "undefined" || Notification.permission !== "granted") return;
   try {
-    const n = new Notification(titulo, { body: corpo, tag: "physioflow-evolucao" });
+    const n = new Notification(titulo, { body: corpo, tag: tag || "physioflow-evolucao" });
     n.onclick = () => { try { window.focus(); } catch(e){} };
   } catch(e) {
     // Alguns contextos (ex.: iframe sem permissão, navegador sem suporte real) lançam mesmo com
@@ -824,7 +824,21 @@ function App({currentUser, onLogout}) {
     const prof = professionals.find(p=>p.id===appt.profissionalId);
     if (notifyEnabled && cliente && prof) {
       if (novoStatus === "confirmado") pushLog("WhatsApp", `Confirmação de presença registrada: ${cliente.nome}, sessão com ${prof.nome} às ${appt.hora}.`);
-      if (novoStatus === "chegou") pushLog("Interno", `${cliente.nome} chegou para a sessão com ${prof.nome} (${appt.hora}).`);
+      if (novoStatus === "chegou") {
+        pushLog("Interno", `${cliente.nome} chegou para a sessão com ${prof.nome} (${appt.hora}).`);
+        // Notificação push ao profissional responsável (RN pedida explicitamente pelo usuário: "ao paciente
+        // entrar na clínica e colocar a sua biometria, o profissional na qual aquele paciente está agendado
+        // recebe uma mensagem"). Cobre tanto a confirmação via biometria (LeitorBiometricoModal →
+        // confirmarChegadaPaciente) quanto qualquer outro caminho que leve o status a "chegou" (ex.: Kanban).
+        // Registra no canal "Push" (trilha de auditoria, visível a qualquer um na aba Notificações) e também
+        // dispara a notificação real do navegador (Web Notification API) — mesma ressalva já documentada
+        // para a evolução pendente: sem um backend/service worker, o push real só aparece no navegador que
+        // estiver com o PhysioFlow aberto no momento da leitura biométrica (normalmente o leitor da recepção),
+        // não necessariamente no dispositivo do profissional.
+        const corpoPush = `Seu paciente ${cliente.nome} chegou (sessão às ${appt.hora}).`;
+        pushLog("Push", `🔔 ${corpoPush}`);
+        dispararNotificacaoPushNavegador(`PhysioFlow — ${prof.nome}`, corpoPush, "physioflow-chegada");
+      }
       if (novoStatus === "atendido") pushLog("Interno", `Atendimento concluído: ${cliente.nome} com ${prof.nome} (${appt.hora}).`);
       if (novoStatus === "desmarcado") pushLog("WhatsApp", `${cliente.nome} desmarcou a sessão de ${appt.hora} com ${prof.nome}.`);
       if (novoStatus === "faltou") pushLog("Interno", `Falta registrada: ${cliente.nome} não compareceu (${appt.hora}, ${prof.nome}).`);
