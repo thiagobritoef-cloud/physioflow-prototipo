@@ -4700,6 +4700,15 @@ function GuiaList({guias, clients, professionals, onNew, onEdit, onEnviarFaturam
 function GuiaModal({data, clients, professionals, unidades, procedimentosTuss, onClose, onSave}) {
   const [form, setForm] = useState(data);
   const clientesConvenio = clients.filter(c=>c.pagamento.tipo==="convenio" || c.id===data.clienteId);
+  // CBO automático a partir do profissional executante (RN pedida explicitamente pelo usuário: "trazer o
+  // CBO automático de acordo com o CRM do médico"). O CBO enviado no XML TISS e conferido na checklist de
+  // prontidão (avaliarProntidaoTiss) já vêm do cadastro do profissional executante (executante?.cbo,
+  // vinculado ao mesmo registro que guarda o CRM/CREFITO em `conselho`) — antes existia aqui um campo de
+  // texto livre e independente (`form.cbo`) que nunca alimentava essas duas coisas, então preenchê-lo à mão
+  // não tinha efeito nenhum no faturamento TISS. Agora o campo é só leitura, espelhando sempre o CBO
+  // cadastrado para o executante selecionado.
+  const executanteSelecionado = professionals.find(p => p.id === form.executanteId);
+  const cboAutomatico = executanteSelecionado?.cbo || "";
   return (
     <Modal title={data.id ? "Editar guia" : "Nova guia de convênio"} onClose={onClose} wide>
       <div className="grid grid-cols-2 gap-x-4">
@@ -4717,13 +4726,24 @@ function GuiaModal({data, clients, professionals, unidades, procedimentosTuss, o
             {professionals.map(p => <option key={p.id} value={p.id}>{p.nome}</option>)}
           </select>
         </Field>
-        <Field label="CBO (código TISS)"><input className={inputCls} value={form.cbo} onChange={e=>setForm({...form,cbo:e.target.value})} placeholder="Ex.: 225133" /></Field>
+        <Field label="Número da guia"><input className={inputCls} value={form.numeroGuia} onChange={e=>setForm({...form,numeroGuia:e.target.value})} /></Field>
         <Field label="Profissional executante">
           <select className={inputCls} value={form.executanteId} onChange={e=>setForm({...form,executanteId:e.target.value})}>
             {professionals.map(p => <option key={p.id} value={p.id}>{p.nome}</option>)}
           </select>
         </Field>
-        <Field label="Número da guia"><input className={inputCls} value={form.numeroGuia} onChange={e=>setForm({...form,numeroGuia:e.target.value})} /></Field>
+        <Field label="CBO (código TISS) — automático pelo CRM/CREFITO do executante">
+          <div className="text-sm text-slate-700 py-1.5 flex items-center gap-2">
+            {cboAutomatico ? (
+              <>
+                <span className="font-medium">{cboAutomatico}</span>
+                <span className="text-xs text-slate-400">CRM/CREFITO: {executanteSelecionado?.conselho || "—"}</span>
+              </>
+            ) : (
+              <span className="text-xs text-amber-600">Executante sem CBO cadastrado — preencha em Profissionais → {executanteSelecionado?.nome || "profissional"}.</span>
+            )}
+          </div>
+        </Field>
         <Field label="Senha"><input className={inputCls} value={form.senha} onChange={e=>setForm({...form,senha:e.target.value})} /></Field>
         <Field label="Validade"><DateInput value={form.validade} onChange={v=>setForm({...form,validade:v})} /></Field>
         <Field label="Especialidade(s)"><input className={inputCls} value={form.especialidades} onChange={e=>setForm({...form,especialidades:e.target.value})} placeholder="Ex.: RPG, Pilates Clínico" /></Field>
@@ -4772,7 +4792,7 @@ function GuiaModal({data, clients, professionals, unidades, procedimentosTuss, o
       </Field>
       <div className="flex justify-end gap-2 mt-4">
         <button onClick={onClose} className="px-4 py-2 text-sm rounded-lg border border-slate-300">Cancelar</button>
-        <button onClick={()=>onSave(form)} className="px-4 py-2 text-sm rounded-lg bg-teal-600 text-white hover:bg-teal-700">Salvar</button>
+        <button onClick={()=>onSave({...form, cbo: cboAutomatico})} className="px-4 py-2 text-sm rounded-lg bg-teal-600 text-white hover:bg-teal-700">Salvar</button>
       </div>
     </Modal>
   );
