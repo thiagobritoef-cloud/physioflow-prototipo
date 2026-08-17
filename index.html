@@ -36,7 +36,7 @@ const PERMISSOES = {
   recepcao:       { label: "Recepção",       tabs: ["agenda","clientes","guias","caixa","vendas","ponto","fichas","notificacoes"] },
   fisioterapeuta: { label: "Fisioterapeuta", tabs: ["agenda","clientes","guias","ponto","fichas","dashboard","notificacoes"], agendaSomenteProprio: true },
   faturamento:    { label: "Faturamento",    tabs: ["clientes","guias","catalogo","dashboard","notificacoes"] },
-  financeiro:     { label: "Financeiro",     tabs: ["caixa","vendas","ponto","dashboard","notificacoes"] },
+  financeiro:     { label: "Financeiro",     tabs: ["caixa","vendas","ponto","profissionais","dashboard","notificacoes"] },
 };
 function permissoesDoPerfil(role){ return PERMISSOES[role] || { label: role || "Usuário", tabs: ["agenda","notificacoes"] }; }
 
@@ -721,6 +721,11 @@ function Modal({title, onClose, children, wide}) {
 /* ---------------- App ---------------- */
 function App({currentUser, onLogout}) {
   const perms = useMemo(() => permissoesDoPerfil(currentUser?.role), [currentUser]);
+  // Permissão de dados gerenciais/financeiros sensíveis (pedida explicitamente pelo usuário em dois pontos:
+  // lançamento gerencial no Fluxo de Caixa "onde somente o gestor ou quem tiver acesso pode ver", e o
+  // detalhamento de Desempenho por profissional "com a opção de liberar ou não de acordo com o usuário").
+  // Papel-base: admin (gestor) e financeiro têm acesso; os demais (recepção, fisioterapeuta, faturamento) não.
+  const podeVerGerencial = currentUser?.role === "admin" || currentUser?.role === "financeiro";
   // Lembra a última aba usada entre sessões/aberturas do site (RN pedida pelo usuário: não voltar
   // sempre para a Agenda ao reabrir). Só cai para a primeira aba permitida se a salva não existir mais
   // ou não for permitida para o perfil logado.
@@ -1548,7 +1553,7 @@ function App({currentUser, onLogout}) {
           />
         )}
         {tab === "profissionais" && (
-          <ProfissionaisPanel professionals={professionals} appointments={appointments} clients={clients} fichas={fichas}
+          <ProfissionaisPanel professionals={professionals} appointments={appointments} clients={clients} fichas={fichas} currentUser={currentUser}
             onNew={()=>setModal({type:"prof", data:{id:"", nome:"", unidadeIds:unidadeFiltro!=="todas"?[unidadeFiltro]:[unidades[0]?.id||""], ehProfissionalSaude:true, conselho:"", cbo:"", cargo:CARGOS_COLABORADOR[4], sala:"", dias:[], horaInicio:"08:00", horaFim:"18:00", comissaoTipo:"percentual", comissaoPercentual:30, comissaoValorSessao:0, comissaoVendaPercentual:0, salarioFixoMensal:0, bonusMensal:0, custoFixoMensal:0,
               tipoVinculo:TIPOS_VINCULO[0], cpf:"", rg:"", dataNascimento:"", endereco:"", telefonePessoal:"", email:"", dataAdmissao:TODAY, foto:null, bio:"", especialidadesInteresse:[], preferencias:{fimDeSemana:false, atendeConvenio:true, atendeParticular:true, plantao:false}, contratoArquivo:null, contratoGeradoEm:null, valorValeTransporteDia:0, valorValeAlimentacaoDia:0, biometriaCadastrada:false}})}
             onEdit={(p)=>setModal({type:"prof", data:p})}
@@ -1586,8 +1591,8 @@ function App({currentUser, onLogout}) {
           />
         )}
         {tab === "caixa" && (
-          <CaixaPanel lancamentos={lancamentosNaUnidade} fechamentos={fechamentos}
-            onNew={(data)=>setModal({type:"lancamento", data:{data, tipo:"receita", formaPagamento:"dinheiro", origemPagamento:"particular", valor:0, descricao:"", unidadeId: unidadeFiltro!=="todas"?unidadeFiltro:(unidades[0]?.id||"")}})}
+          <CaixaPanel lancamentos={lancamentosNaUnidade} fechamentos={fechamentos} currentUser={currentUser}
+            onNew={(data)=>setModal({type:"lancamento", data:{data, tipo:"receita", formaPagamento:"dinheiro", origemPagamento:"particular", valor:0, descricao:"", gerencial:false, unidadeId: unidadeFiltro!=="todas"?unidadeFiltro:(unidades[0]?.id||"")}})}
             onEdit={(l)=>setModal({type:"lancamento", data:{...l}})}
             onFechar={fecharCaixa} onReabrir={reabrirCaixa}
           />
@@ -1612,7 +1617,7 @@ function App({currentUser, onLogout}) {
           />
         )}
         {tab === "dashboard" && (
-          <Dashboard clients={clients} appointments={appointmentsNaUnidade} guias={guiasNaUnidade} lancamentos={lancamentosNaUnidade} fichas={fichas} produtos={produtos} convenios={convenios} procedimentosTuss={procedimentosTuss} vendas={vendas} />
+          <DashboardPanel clients={clients} appointments={appointmentsNaUnidade} guias={guiasNaUnidade} lancamentos={lancamentosNaUnidade} fichas={fichas} produtos={produtos} convenios={convenios} procedimentosTuss={procedimentosTuss} vendas={vendas} professionals={professionals} />
         )}
         {tab === "usuarios" && (
           <UsuariosPanel currentUser={currentUser} />
@@ -1657,7 +1662,7 @@ function App({currentUser, onLogout}) {
         <GlosaModal guia={modal.data} onClose={()=>setModal(null)} onSave={registrarGlosa} />
       )}
       {modal?.type === "lancamento" && (
-        <LancamentoModal data={modal.data} unidades={unidades} clients={clients} onClose={()=>setModal(null)} onSave={addLancamento} />
+        <LancamentoModal data={modal.data} unidades={unidades} clients={clients} podeVerGerencial={podeVerGerencial} onClose={()=>setModal(null)} onSave={addLancamento} />
       )}
       {modal?.type === "venderProduto" && (
         <VenderProdutoModal data={modal.data} produtos={produtos} clients={clients} currentUser={currentUser} onClose={()=>setModal(null)} onSave={venderProdutoAvulso} />
@@ -2403,17 +2408,38 @@ function ClientList({clients, professionals, appointments, onNew, onEdit, onView
     return map;
   }, [clients, appointments, professionals]);
 
+  // Sub-abas por convênio + particulares (pedido explicitamente pelo usuário: "criar uma sub abas para
+  // analizar clientes por convenios diferentes de acordo com o selecionado, bem como os particulares").
+  // A lista de convênios é dinâmica — sai direto dos clientes cadastrados, não de um cadastro fixo, então
+  // some/aparece sozinha conforme a carteira de pacientes muda.
+  const [subAba, setSubAba] = useState("todos"); // "todos" | "particulares" | nome do convênio
+  const conveniosPresentes = useMemo(() => {
+    return [...new Set(clients.filter(c=>c.pagamento?.tipo==="convenio" && c.convenio).map(c=>c.convenio))].sort();
+  }, [clients]);
+  const clientsFiltrados = useMemo(() => {
+    if (subAba === "todos") return clients;
+    if (subAba === "particulares") return clients.filter(c => c.pagamento?.tipo !== "convenio");
+    return clients.filter(c => c.pagamento?.tipo === "convenio" && c.convenio === subAba);
+  }, [clients, subAba]);
+
   return (
     <div>
-      <ClientesKpiHeader clients={clients} />
+      <ClientesKpiHeader clients={clientsFiltrados} />
       <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
-        <h2 className="text-lg font-semibold text-slate-800">Clientes ({clients.length})</h2>
+        <h2 className="text-lg font-semibold text-slate-800">Clientes ({clientsFiltrados.length}{subAba!=="todos" ? ` de ${clients.length}` : ""})</h2>
         <div className="flex items-center gap-2 flex-wrap">
           <BuscaRapidaBar placeholder="Buscar paciente por nome..." items={clients} getLabel={c=>c.nome} getSub={c=>c.telefone}
             onSelect={c=>onViewProfile(c)} />
           <button onClick={onImportarLote} className="px-3 py-2 text-sm rounded-lg border border-slate-300 text-slate-600 hover:bg-slate-50">Importar em lote (CSV)</button>
           <button onClick={onNew} className="px-3 py-2 text-sm rounded-lg bg-teal-600 text-white hover:bg-teal-700">+ Novo cliente</button>
         </div>
+      </div>
+      <div className="flex gap-1 bg-slate-200/60 rounded-lg p-1 mb-3 flex-wrap w-fit">
+        <button onClick={()=>setSubAba("todos")} className={"px-3 py-1.5 rounded-md text-xs font-medium " + (subAba==="todos" ? "bg-white shadow text-teal-700" : "text-slate-500")}>Todos ({clients.length})</button>
+        <button onClick={()=>setSubAba("particulares")} className={"px-3 py-1.5 rounded-md text-xs font-medium " + (subAba==="particulares" ? "bg-white shadow text-teal-700" : "text-slate-500")}>Particulares ({clients.filter(c=>c.pagamento?.tipo!=="convenio").length})</button>
+        {conveniosPresentes.map(conv => (
+          <button key={conv} onClick={()=>setSubAba(conv)} className={"px-3 py-1.5 rounded-md text-xs font-medium " + (subAba===conv ? "bg-white shadow text-teal-700" : "text-slate-500")}>{conv} ({clients.filter(c=>c.pagamento?.tipo==="convenio" && c.convenio===conv).length})</button>
+        ))}
       </div>
       <div className="bg-white rounded-xl border border-slate-200 overflow-x-auto">
         <table className="w-full text-sm">
@@ -2430,7 +2456,10 @@ function ClientList({clients, professionals, appointments, onNew, onEdit, onView
             </tr>
           </thead>
           <tbody>
-            {clients.map(c => {
+            {clientsFiltrados.length===0 && (
+              <tr><td colSpan="8" className="text-center py-4 text-slate-400">Nenhum cliente nessa categoria.</td></tr>
+            )}
+            {clientsFiltrados.map(c => {
               const perfil = perfis[c.id] || { ltv:0, especialidades:[] };
               return (
               <tr key={c.id} className="border-t border-slate-100 hover:bg-slate-50">
@@ -3056,13 +3085,16 @@ function ClientProfileModal({cliente, clients, appointments, professionals, guia
 }
 
 /* ---------------- Professionals ---------------- */
-function ProfissionaisPanel({professionals, appointments, clients, fichas, onNew, onEdit, onViewProfile}) {
+function ProfissionaisPanel({professionals, appointments, clients, fichas, onNew, onEdit, onViewProfile, currentUser}) {
+  const podeVerGerencial = currentUser?.role === "admin" || currentUser?.role === "financeiro";
   const [view, setView] = useState("cadastro");
+  useEffect(() => { if (!podeVerGerencial && view !== "cadastro") setView("cadastro"); }, [podeVerGerencial]);
+  const pills = [["cadastro","Cadastro"], ...(podeVerGerencial ? [["desempenho","Desempenho"],["individual","Individual"]] : [])];
   return (
     <div>
       <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
         <div className="flex gap-1 bg-slate-200/60 rounded-lg p-1">
-          {[["cadastro","Cadastro"],["desempenho","Desempenho"]].map(([id,label]) => (
+          {pills.map(([id,label]) => (
             <button key={id} onClick={()=>setView(id)} className={"px-3 py-1.5 rounded-md text-sm font-medium " + (view===id ? "bg-white shadow text-teal-700" : "text-slate-500")}>{label}</button>
           ))}
         </div>
@@ -3073,7 +3105,8 @@ function ProfissionaisPanel({professionals, appointments, clients, fichas, onNew
         </div>
       </div>
       {view === "cadastro" && <ProfessionalList professionals={professionals} onEdit={onEdit} onViewProfile={onViewProfile} />}
-      {view === "desempenho" && <ProfessionalDashboard professionals={professionals} appointments={appointments} clients={clients} fichas={fichas} />}
+      {view === "desempenho" && podeVerGerencial && <ProfessionalDashboard professionals={professionals} appointments={appointments} clients={clients} fichas={fichas} />}
+      {view === "individual" && podeVerGerencial && <ProfessionalIndividual professionals={professionals} appointments={appointments} clients={clients} />}
     </div>
   );
 }
@@ -3133,37 +3166,62 @@ function ProfessionalList({professionals, onEdit, onViewProfile}) {
 }
 
 function ProfessionalDashboard({professionals, appointments, clients, fichas}) {
-  const mesAtual = TODAY.slice(0,7);
-  const apptsMes = useMemo(() => appointments.filter(a=>a.data.startsWith(mesAtual)), [appointments, mesAtual]);
-  const totalAgendaClinicaMes = apptsMes.length;
+  const anoAtual = Number(TODAY.slice(0,4));
+  const mesAtualNum = Number(TODAY.slice(5,7));
+  const [ano, setAno] = useState(anoAtual);
+  const [mes, setMes] = useState(mesAtualNum); // 0 = compilado (ano todo)
+  const anos = [anoAtual-1, anoAtual, anoAtual+1];
+  const periodoTipo = mes ? "mes" : "ano";
+  const anterior = periodoAnterior(ano, mes);
+  const anteriorTipo = anterior.mes ? "mes" : "ano";
+
+  const apptsPeriodoTodos = useMemo(() => appointments.filter(a=>noPeriodo(a.data, periodoTipo, mes, ano)), [appointments, periodoTipo, mes, ano]);
+  const totalAgendaClinicaPeriodo = apptsPeriodoTodos.length;
 
   const linhas = useMemo(() => professionals.map(prof => {
     const apptsProf = appointments.filter(a=>a.profissionalId===prof.id);
-    const apptsProfMes = apptsMes.filter(a=>a.profissionalId===prof.id);
-    const confirmadosMes = apptsProfMes.filter(a=>a.status==="atendido");
-    const avaliacoesMes = apptsProfMes.filter(a=>(a.tipo||"sessao")==="avaliacao").length;
-    const desmarcadosMes = apptsProfMes.filter(a=>a.status==="desmarcado").length;
-    const faltasMes = apptsProfMes.filter(a=>a.status==="faltou").length;
+    const apptsProfPeriodo = apptsPeriodoTodos.filter(a=>a.profissionalId===prof.id);
+    const apptsProfAnterior = apptsProf.filter(a=>noPeriodo(a.data, anteriorTipo, anterior.mes, anterior.ano));
+    const confirmadosPeriodo = apptsProfPeriodo.filter(a=>a.status==="atendido");
+    const avaliacoesMes = apptsProfPeriodo.filter(a=>(a.tipo||"sessao")==="avaliacao").length;
+    const desmarcadosMes = apptsProfPeriodo.filter(a=>a.status==="desmarcado").length;
+    const faltasMes = apptsProfPeriodo.filter(a=>a.status==="faltou").length;
     const evolucoesAtraso = apptsProf.filter(a=>isEvolucaoAtrasada(a)).length;
     const pacientesUnicos = new Set(apptsProf.map(a=>a.clienteId)).size;
-    const faturamentoMes = confirmadosMes.reduce((s,a) => { const c = clients.find(cl=>cl.id===a.clienteId); return s + (c?.valorSessao||0); }, 0);
+    const faturamentoMes = confirmadosPeriodo.reduce((s,a) => { const c = clients.find(cl=>cl.id===a.clienteId); return s + (c?.valorSessao||0); }, 0);
     const comissao = prof.comissaoTipo === "fixo"
-      ? confirmadosMes.length * (prof.comissaoValorSessao||0)
+      ? confirmadosPeriodo.length * (prof.comissaoValorSessao||0)
       : prof.comissaoTipo === "salario"
       ? (prof.salarioFixoMensal||0) + (prof.bonusMensal||0)
       : faturamentoMes * (prof.comissaoPercentual||0) / 100;
     const custoTotal = comissao + (prof.custoFixoMensal||0);
     const roi = custoTotal > 0 ? ((faturamentoMes - custoTotal) / custoTotal) * 100 : null;
-    const horasDisponiveisMes = (prof.dias?.length||0) * horasEntre(prof.horaInicio, prof.horaFim) * 4.33;
-    const horasOcupadasMes = confirmadosMes.length; // assume ~1h por sessão
-    const taxaOcupacao = horasDisponiveisMes > 0 ? (horasOcupadasMes / horasDisponiveisMes) * 100 : 0;
-    const percentualAgenda = totalAgendaClinicaMes > 0 ? (apptsProfMes.length / totalAgendaClinicaMes) * 100 : 0;
-    return { prof, pacientesUnicos, atendimentosMes: confirmadosMes.length, avaliacoesMes, desmarcadosMes, faltasMes, evolucoesAtraso, faturamentoMes, comissao, custoTotal, roi, taxaOcupacao, percentualAgenda };
-  }), [professionals, appointments, apptsMes, clients, fichas, totalAgendaClinicaMes]);
+    const horasDisponiveisPeriodo = (prof.dias?.length||0) * horasEntre(prof.horaInicio, prof.horaFim) * (mes ? 4.33 : 52);
+    const horasOcupadasPeriodo = confirmadosPeriodo.length; // assume ~1h por sessão
+    const taxaOcupacao = horasDisponiveisPeriodo > 0 ? (horasOcupadasPeriodo / horasDisponiveisPeriodo) * 100 : 0;
+    const percentualAgenda = totalAgendaClinicaPeriodo > 0 ? (apptsProfPeriodo.length / totalAgendaClinicaPeriodo) * 100 : 0;
+
+    const pacientesAtualIds = new Set(apptsProfPeriodo.map(a=>a.clienteId));
+    const pacientesAnteriorIds = new Set(apptsProfAnterior.map(a=>a.clienteId));
+    const pacientesPerdidos = [...pacientesAnteriorIds].filter(id => !pacientesAtualIds.has(id)).length;
+
+    const altasPeriodo = clients.filter(c => c.alta && c.alta.profissionalId===prof.id && noPeriodo(c.alta.data, periodoTipo, mes, ano)).length;
+
+    return { prof, pacientesUnicos, atendimentosMes: confirmadosPeriodo.length, avaliacoesMes, desmarcadosMes, faltasMes, evolucoesAtraso, faturamentoMes, comissao, custoTotal, roi, taxaOcupacao, percentualAgenda, pacientesPerdidos, altasPeriodo };
+  }), [professionals, appointments, apptsPeriodoTodos, clients, fichas, totalAgendaClinicaPeriodo, periodoTipo, mes, ano, anteriorTipo, anterior]);
 
   return (
     <div>
-      <p className="text-xs text-slate-400 mb-3">Métricas referentes a {mesAtual.split("-").reverse().join("/")} (mês atual). Ocupação assume ~1h por sessão confirmada.</p>
+      <div className="flex items-center gap-3 mb-3 flex-wrap">
+        <Field label="Ano"><select className={inputCls + " max-w-[110px]"} value={ano} onChange={e=>setAno(Number(e.target.value))}>
+          {anos.map(a => <option key={a} value={a}>{a}</option>)}
+        </select></Field>
+        <Field label="Período"><select className={inputCls + " max-w-[180px]"} value={mes} onChange={e=>setMes(Number(e.target.value))}>
+          <option value={0}>Compilado (ano todo)</option>
+          {MESES_PT.map((m,i) => <option key={i} value={i+1}>{m}</option>)}
+        </select></Field>
+      </div>
+      <p className="text-xs text-slate-400 mb-3">Métricas referentes a {mes ? `${MESES_PT[mes-1]}/${ano}` : `${ano} (compilado)`}. "Pacientes perdidos" = tinham atendimento com o profissional no período anterior ({anterior.mes ? `${MESES_PT[anterior.mes-1]}/${anterior.ano}` : `${anterior.ano} compilado`}) e não aparecem mais na agenda dele no período selecionado. Ocupação assume ~1h por sessão confirmada.</p>
       <div className="bg-white rounded-xl border border-slate-200 overflow-x-auto">
         <table className="w-full text-sm">
           <thead className="bg-slate-50 text-slate-500 text-xs uppercase">
@@ -3171,12 +3229,14 @@ function ProfessionalDashboard({professionals, appointments, clients, fichas}) {
               <th className="text-left px-3 py-2">Profissional</th>
               <th className="text-right px-3 py-2">Ocupação</th>
               <th className="text-right px-3 py-2">Pacientes</th>
-              <th className="text-right px-3 py-2">Atend./mês</th>
+              <th className="text-right px-3 py-2">Atend./período</th>
               <th className="text-right px-3 py-2">Avaliações</th>
               <th className="text-right px-3 py-2">Desmarcados</th>
               <th className="text-right px-3 py-2">Faltas</th>
               <th className="text-right px-3 py-2">Evol. atrasada</th>
               <th className="text-right px-3 py-2">% agenda clínica</th>
+              <th className="text-right px-3 py-2">Pacientes perdidos</th>
+              <th className="text-right px-3 py-2">Altas no período</th>
               <th className="text-right px-3 py-2">Faturamento</th>
               <th className="text-right px-3 py-2">Comissão</th>
               <th className="text-right px-3 py-2">ROI</th>
@@ -3194,6 +3254,8 @@ function ProfessionalDashboard({professionals, appointments, clients, fichas}) {
                 <td className="px-3 py-2 text-right text-red-600">{l.faltasMes}</td>
                 <td className="px-3 py-2 text-right text-orange-600">{l.evolucoesAtraso}</td>
                 <td className="px-3 py-2 text-right text-slate-600">{l.percentualAgenda.toFixed(0)}%</td>
+                <td className={"px-3 py-2 text-right font-medium " + (l.pacientesPerdidos>0 ? "text-red-600" : "text-slate-400")}>{l.pacientesPerdidos}</td>
+                <td className="px-3 py-2 text-right text-green-600 font-medium">{l.altasPeriodo}</td>
                 <td className="px-3 py-2 text-right text-slate-700 font-medium">{fmtBRL(l.faturamentoMes)}</td>
                 <td className="px-3 py-2 text-right text-slate-600">{fmtBRL(l.comissao)}</td>
                 <td className={"px-3 py-2 text-right font-semibold " + (l.roi===null ? "text-slate-400" : l.roi>=0 ? "text-green-600" : "text-red-600")}>{l.roi===null ? "—" : `${l.roi.toFixed(0)}%`}</td>
@@ -3202,6 +3264,111 @@ function ProfessionalDashboard({professionals, appointments, clients, fichas}) {
           </tbody>
         </table>
       </div>
+    </div>
+  );
+}
+
+// Sub-aba "Individual": análise focada em um único profissional, incluindo nomes dos pacientes perdidos,
+// ROI simples (faturado ÷ custo — distinto do ROI percentual da tabela de Desempenho acima), composição
+// particular×convênio e contagem de atendimentos filtrada por plano específico quando selecionado. Gate
+// de acesso (role admin/financeiro) é feito no componente pai (ProfissionaisPanel).
+function ProfessionalIndividual({professionals, appointments, clients}) {
+  const anoAtual = Number(TODAY.slice(0,4));
+  const mesAtualNum = Number(TODAY.slice(5,7));
+  const [profId, setProfId] = useState(professionals[0]?.id || "");
+  const [ano, setAno] = useState(anoAtual);
+  const [mes, setMes] = useState(mesAtualNum); // 0 = compilado (ano todo)
+  const [plano, setPlano] = useState("todos");
+  useEffect(() => { if ((!profId || !professionals.some(p=>p.id===profId)) && professionals.length>0) setProfId(professionals[0].id); }, [professionals, profId]);
+  const anos = [anoAtual-1, anoAtual, anoAtual+1];
+  const prof = professionals.find(p=>p.id===profId);
+
+  const planosDisponiveis = useMemo(() => [...new Set(clients.filter(c=>c.pagamento?.tipo==="convenio" && c.convenio).map(c=>c.convenio))].sort(), [clients]);
+
+  const dados = useMemo(() => {
+    if (!prof) return null;
+    const periodoTipo = mes ? "mes" : "ano";
+    const anterior = periodoAnterior(ano, mes);
+    const anteriorTipo = anterior.mes ? "mes" : "ano";
+    const apptsProf = appointments.filter(a=>a.profissionalId===prof.id);
+    const apptsPeriodo = apptsProf.filter(a=>noPeriodo(a.data, periodoTipo, mes, ano));
+    const apptsAnterior = apptsProf.filter(a=>noPeriodo(a.data, anteriorTipo, anterior.mes, anterior.ano));
+    const confirmadosPeriodo = apptsPeriodo.filter(a=>a.status==="atendido");
+    const faturado = confirmadosPeriodo.reduce((s,a) => { const c = clients.find(cl=>cl.id===a.clienteId); return s + (c?.valorSessao||0); }, 0);
+    const comissao = prof.comissaoTipo === "fixo"
+      ? confirmadosPeriodo.length * (prof.comissaoValorSessao||0)
+      : prof.comissaoTipo === "salario"
+      ? (prof.salarioFixoMensal||0) + (prof.bonusMensal||0)
+      : faturado * (prof.comissaoPercentual||0) / 100;
+    const custoTotal = comissao + (prof.custoFixoMensal||0);
+    const roi = custoTotal > 0 ? (faturado / custoTotal) : null;
+
+    const pacientesAtualIds = new Set(apptsPeriodo.map(a=>a.clienteId));
+    const pacientesAnteriorIds = new Set(apptsAnterior.map(a=>a.clienteId));
+    const pacientesPerdidosNomes = [...pacientesAnteriorIds]
+      .filter(id => !pacientesAtualIds.has(id))
+      .map(id => clients.find(c=>c.id===id)?.nome)
+      .filter(Boolean)
+      .sort();
+
+    const clientesNoPeriodo = [...pacientesAtualIds].map(id => clients.find(c=>c.id===id)).filter(Boolean);
+    const numParticulares = clientesNoPeriodo.filter(c => c.pagamento?.tipo !== "convenio").length;
+    const numConvenio = clientesNoPeriodo.filter(c => c.pagamento?.tipo === "convenio").length;
+
+    const atendimentosPlano = plano !== "todos"
+      ? confirmadosPeriodo.filter(a => { const c = clients.find(cl=>cl.id===a.clienteId); return c?.pagamento?.tipo==="convenio" && c.convenio===plano; }).length
+      : null;
+
+    return { faturado, comissao, roi, pacientesPerdidosNomes, numParticulares, numConvenio, atendimentosPlano, anterior, anteriorTipo };
+  }, [prof, appointments, clients, ano, mes, plano]);
+
+  return (
+    <div>
+      <div className="flex items-center gap-3 mb-4 flex-wrap">
+        <Field label="Profissional"><select className={inputCls + " max-w-[220px]"} value={profId} onChange={e=>setProfId(e.target.value)}>
+          {professionals.length===0 && <option value="">Nenhum profissional cadastrado</option>}
+          {professionals.map(p => <option key={p.id} value={p.id}>{p.nome}</option>)}
+        </select></Field>
+        <Field label="Ano"><select className={inputCls + " max-w-[110px]"} value={ano} onChange={e=>setAno(Number(e.target.value))}>
+          {anos.map(a => <option key={a} value={a}>{a}</option>)}
+        </select></Field>
+        <Field label="Período"><select className={inputCls + " max-w-[180px]"} value={mes} onChange={e=>setMes(Number(e.target.value))}>
+          <option value={0}>Compilado (ano todo)</option>
+          {MESES_PT.map((m,i) => <option key={i} value={i+1}>{m}</option>)}
+        </select></Field>
+        <Field label="Plano (opcional)"><select className={inputCls + " max-w-[200px]"} value={plano} onChange={e=>setPlano(e.target.value)}>
+          <option value="todos">Todos</option>
+          {planosDisponiveis.map(p => <option key={p} value={p}>{p}</option>)}
+        </select></Field>
+      </div>
+
+      {!prof && <p className="text-sm text-slate-400">Nenhum profissional cadastrado.</p>}
+
+      {prof && dados && (
+        <>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
+            <KpiCard label="Faturado no período" value={fmtBRL(dados.faturado)} tone="teal" />
+            <KpiCard label="Comissão (segundo cadastro)" value={fmtBRL(dados.comissao)} tone="default" />
+            <KpiCard label="ROI (faturado ÷ custo)" value={dados.roi===null ? "—" : `${dados.roi.toFixed(2)}x`} tone={dados.roi!==null && dados.roi>=1 ? "green" : "amber"} />
+            <KpiCard label="Pacientes perdidos" value={dados.pacientesPerdidosNomes.length} tone={dados.pacientesPerdidosNomes.length>0 ? "red" : "default"} />
+            <KpiCard label="Pacientes particulares" value={dados.numParticulares} tone="default" />
+            <KpiCard label="Pacientes de convênio" value={dados.numConvenio} tone="default" />
+            {plano!=="todos" && <KpiCard label={`Atendimentos em ${plano}`} value={dados.atendimentosPlano} tone="teal" />}
+          </div>
+
+          <div className="bg-white rounded-xl border border-slate-200 p-4">
+            <div className="text-sm font-medium text-slate-700 mb-1">Pacientes perdidos ({dados.pacientesPerdidosNomes.length})</div>
+            <p className="text-[11px] text-slate-400 mb-2">Tinham atendimento com {prof.nome} em {dados.anteriorTipo==="mes" ? `${MESES_PT[dados.anterior.mes-1]}/${dados.anterior.ano}` : `${dados.anterior.ano} (compilado)`} e não aparecem mais na agenda dele no período selecionado.</p>
+            {dados.pacientesPerdidosNomes.length===0 ? (
+              <p className="text-xs text-slate-400">Nenhum paciente perdido nesse período.</p>
+            ) : (
+              <ul className="text-sm text-slate-600 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-1">
+                {dados.pacientesPerdidosNomes.map(n => <li key={n}>• {n}</li>)}
+              </ul>
+            )}
+          </div>
+        </>
+      )}
     </div>
   );
 }
@@ -4356,6 +4523,15 @@ function noPeriodo(dataIso, periodoTipo, mes, ano){
   return y === ano && m === mes;
 }
 
+// mes === 0 significa "compilado" (ano todo). Usado nos painéis de desempenho de profissionais para
+// permitir comparar o período selecionado com o período imediatamente anterior (mês anterior, ou ano
+// anterior quando o próprio período selecionado já é o compilado do ano).
+function periodoAnterior(ano, mes){
+  if (!mes) return { ano: ano-1, mes: 0 };
+  if (mes === 1) return { ano: ano-1, mes: 12 };
+  return { ano, mes: mes-1 };
+}
+
 function valorBucketPeriodo(appointments, clients, bucket, ano, mes){
   return appointments.filter(a => {
     if (a.status !== "atendido") return false;
@@ -4365,6 +4541,49 @@ function valorBucketPeriodo(appointments, clients, bucket, ano, mes){
     const c = clients.find(cl=>cl.id===a.clienteId);
     return c && getBucketCliente(c) === bucket;
   }).reduce((s,a) => { const c = clients.find(cl=>cl.id===a.clienteId); return s + (c?.valorSessao||0); }, 0);
+}
+
+// DRE gerencial simplificado para um período (mes=0 → compilado/ano todo). Função pura reutilizada tanto
+// para o período selecionado quanto para montar a tabela de evolução mensal (12 meses) no Dashboard → DRE.
+// Reaproveita as mesmas fórmulas já usadas em outras abas (comissão por cadastro do profissional, valor
+// produzido por bucket de convênio/particular, valor de glosa real registrado na guia) para manter os
+// números consistentes com o resto do sistema.
+function computeDRE(ano, mes, {appointments, clients, guias, lancamentos, vendas, professionals}){
+  const periodoTipo = mes ? "mes" : "ano";
+  const bucketsPresentes = [...new Set(clients.map(getBucketCliente))];
+  const receitaBruta = bucketsPresentes.reduce((s,b) => s + valorBucketPeriodo(appointments, clients, b, ano, mes), 0);
+
+  const glosasPeriodo = guias.filter(g => (g.status==="glosada_parcial"||g.status==="glosada_total") && g.dataEnvio && noPeriodo(g.dataEnvio, periodoTipo, mes, ano));
+  const deducoes = glosasPeriodo.reduce((s,g) => s + (g.valorGlosa||0), 0);
+  const receitaLiquida = receitaBruta - deducoes;
+
+  const mesesNoPeriodo = mes ? 1 : 12;
+  const custosProfissionais = (professionals||[]).reduce((s, prof) => {
+    const apptsProfPeriodo = appointments.filter(a => a.profissionalId===prof.id && a.status==="atendido" && noPeriodo(a.data, periodoTipo, mes, ano));
+    const faturamentoProf = apptsProfPeriodo.reduce((ss,a) => { const c = clients.find(cl=>cl.id===a.clienteId); return ss + (c?.valorSessao||0); }, 0);
+    const comissao = prof.comissaoTipo === "fixo"
+      ? apptsProfPeriodo.length * (prof.comissaoValorSessao||0)
+      : prof.comissaoTipo === "salario"
+      ? ((prof.salarioFixoMensal||0) + (prof.bonusMensal||0)) * mesesNoPeriodo
+      : faturamentoProf * (prof.comissaoPercentual||0) / 100;
+    return s + comissao + (prof.custoFixoMensal||0) * mesesNoPeriodo;
+  }, 0);
+
+  const vendasPeriodo = (vendas||[]).filter(v => v.data && noPeriodo(v.data, periodoTipo, mes, ano));
+  const custosComissaoVendas = vendasPeriodo.reduce((s,v) => s + (v.comissaoValor||0), 0);
+  const custosTotais = custosProfissionais + custosComissaoVendas;
+  const lucroBruto = receitaLiquida - custosTotais;
+
+  // Despesas de caixa contam integralmente aqui, inclusive lançamentos gerenciais (o valor entra nos
+  // totais mesmo quando a linha fica oculta/mascarada na aba Fluxo de Caixa para quem não tem permissão).
+  const despesasOperacionais = lancamentos.filter(l => l.tipo==="despesa" && noPeriodo(l.data, periodoTipo, mes, ano)).reduce((s,l) => s + l.valor, 0);
+  const resultadoOperacional = lucroBruto - despesasOperacionais;
+  const lucroLiquido = resultadoOperacional; // protótipo não modela impostos/depreciação
+
+  const margemBruta = receitaLiquida > 0 ? (lucroBruto / receitaLiquida * 100) : 0;
+  const margemLiquida = receitaBruta > 0 ? (lucroLiquido / receitaBruta * 100) : 0;
+
+  return { receitaBruta, deducoes, receitaLiquida, custosProfissionais, custosComissaoVendas, custosTotais, lucroBruto, despesasOperacionais, resultadoOperacional, lucroLiquido, margemBruta, margemLiquida };
 }
 
 function calcTempoMedioPagamento(guias, convenio){
@@ -4383,7 +4602,7 @@ function GuiasPanel({guias, clients, professionals, appointments, convenios, uni
     <div>
       <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
         <div className="flex gap-1 bg-slate-200/60 rounded-lg p-1">
-          {[["lista","Lista"],["resumo","Resumo"],["leitor","Leitor de código de barras"],["tiss","TISS"]].map(([id,label]) => (
+          {[["lista","Lista"],["resumo","Resumo"],["porplano","Por plano"],["leitor","Leitor de código de barras"],["tiss","TISS"]].map(([id,label]) => (
             <button key={id} onClick={()=>setView(id)} className={"px-3 py-1.5 rounded-md text-sm font-medium " + (view===id ? "bg-white shadow text-teal-700" : "text-slate-500")}>{label}</button>
           ))}
         </div>
@@ -4394,7 +4613,8 @@ function GuiasPanel({guias, clients, professionals, appointments, convenios, uni
           onNew={onNew} onEdit={onEdit} onEnviarFaturamento={onEnviarFaturamento} onMarcarPaga={onMarcarPaga}
           onRegistrarGlosa={onRegistrarGlosa} onReabrir={onReabrir} onSolicitarEletronica={onSolicitarEletronica} />
       )}
-      {view === "resumo" && <GuiasResumo guias={guias} clients={clients} appointments={appointments} />}
+      {view === "resumo" && <GuiasResumo guias={guias} clients={clients} appointments={appointments} procedimentosTuss={procedimentosTuss} convenios={convenios} />}
+      {view === "porplano" && <GuiasPorPlano guias={guias} clients={clients} appointments={appointments} procedimentosTuss={procedimentosTuss} convenios={convenios} />}
       {view === "leitor" && <LeitorCodigoBarras guias={guias} onVincular={onVincularCodigo} onRegistrarEnvio={onRegistrarEnvioCodigo} />}
       {view === "tiss" && (
         <TISSPanel guias={guias} clients={clients} professionals={professionals} appointments={appointments}
@@ -4514,20 +4734,33 @@ function LeitorCodigoBarras({guias, onVincular, onRegistrarEnvio}) {
   );
 }
 
-function GuiasResumo({guias, clients, appointments}) {
+function GuiasResumo({guias, clients, appointments, procedimentosTuss, convenios}) {
   const anoAtual = Number(TODAY.slice(0,4));
   const mesAtual = Number(TODAY.slice(5,7));
   const [periodoTipo, setPeriodoTipo] = useState("mes");
   const [mes, setMes] = useState(mesAtual);
   const [ano, setAno] = useState(anoAtual);
 
-  const contagens = useMemo(() => ({
-    enviadas: guias.filter(g => g.dataEnvio && noPeriodo(g.dataEnvio, periodoTipo, mes, ano)).length,
-    abertas: guias.filter(g => g.status==="aberta" && noPeriodo(g.validade, periodoTipo, mes, ano)).length,
-    pagas: guias.filter(g => g.dataPagamento && noPeriodo(g.dataPagamento, periodoTipo, mes, ano)).length,
-    glosadas: guias.filter(g => (g.status==="glosada_parcial"||g.status==="glosada_total") && noPeriodo(g.dataEnvio||g.validade, periodoTipo, mes, ano)).length,
-    canceladas: guias.filter(g => g.status==="cancelada" && noPeriodo(g.validade, periodoTipo, mes, ano)).length,
-  }), [guias, periodoTipo, mes, ano]);
+  // Indicadores por status (pedido explicitamente pelo usuário: "trazer indicadores com Em aberto,
+  // enviadas, pagas, glosadas, tanto na quantidade quanto no valor"). Valor usa o mesmo cálculo já
+  // padronizado no resto do sistema (valorGuiaPendente = preço do procedimento TUSS pelo convênio ×
+  // sessões autorizadas, menos glosa) para enviadas/abertas/pagas; glosadas usa o valor de glosa
+  // efetivamente registrado (guia.valorGlosa), que é o dado real de perda, não uma estimativa.
+  const contagens = useMemo(() => {
+    const enviadasList = guias.filter(g => g.dataEnvio && noPeriodo(g.dataEnvio, periodoTipo, mes, ano));
+    const abertasList = guias.filter(g => g.status==="aberta" && noPeriodo(g.validade, periodoTipo, mes, ano));
+    const pagasList = guias.filter(g => g.dataPagamento && noPeriodo(g.dataPagamento, periodoTipo, mes, ano));
+    const glosadasList = guias.filter(g => (g.status==="glosada_parcial"||g.status==="glosada_total") && noPeriodo(g.dataEnvio||g.validade, periodoTipo, mes, ano));
+    const canceladasList = guias.filter(g => g.status==="cancelada" && noPeriodo(g.validade, periodoTipo, mes, ano));
+    const somaValor = list => list.reduce((s,g)=>s+valorGuiaPendente(g, procedimentosTuss, convenios), 0);
+    return {
+      enviadas: enviadasList.length, valorEnviadas: somaValor(enviadasList),
+      abertas: abertasList.length, valorAbertas: somaValor(abertasList),
+      pagas: pagasList.length, valorPagas: somaValor(pagasList),
+      glosadas: glosadasList.length, valorGlosadas: glosadasList.reduce((s,g)=>s+(g.valorGlosa||0),0),
+      canceladas: canceladasList.length,
+    };
+  }, [guias, periodoTipo, mes, ano, procedimentosTuss, convenios]);
 
   const todosPlanos = useMemo(() => {
     const buckets = [...new Set(clients.map(getBucketCliente))];
@@ -4575,10 +4808,10 @@ function GuiasResumo({guias, clients, appointments}) {
       </div>
 
       <div className="grid grid-cols-2 md:grid-cols-5 gap-3 mb-4">
-        <KpiCard label="Enviadas" value={contagens.enviadas} tone="amber" />
-        <KpiCard label="Abertas" value={contagens.abertas} tone="default" />
-        <KpiCard label="Pagas" value={contagens.pagas} tone="green" />
-        <KpiCard label="Glosadas" value={contagens.glosadas} tone="red" />
+        <KpiCard label="Enviadas" value={contagens.enviadas} tone="amber" sub={fmtBRL(contagens.valorEnviadas)} />
+        <KpiCard label="Em aberto" value={contagens.abertas} tone="default" sub={fmtBRL(contagens.valorAbertas)} />
+        <KpiCard label="Pagas" value={contagens.pagas} tone="green" sub={fmtBRL(contagens.valorPagas)} />
+        <KpiCard label="Glosadas" value={contagens.glosadas} tone="red" sub={fmtBRL(contagens.valorGlosadas)} />
         <KpiCard label="Canceladas" value={contagens.canceladas} tone="default" />
       </div>
 
@@ -4616,6 +4849,81 @@ function GuiasResumo({guias, clients, appointments}) {
           </tbody>
         </table>
       </div>
+    </div>
+  );
+}
+
+// Sub-aba "Por plano" (pedida explicitamente pelo usuário: "uma sub aba onde posso selecionar por plano e
+// ver o valor enviado mês a mês no ano selecionado, quantos pacientes daquele plano e a porcentagem que
+// aquele plano detém do faturamento total do mês"). Só lista convênios (planos de verdade) — Particular/
+// Bolsa não fazem sentido aqui porque não têm guia/faturamento por convênio.
+function GuiasPorPlano({guias, clients, appointments, procedimentosTuss, convenios}) {
+  const anoAtual = Number(TODAY.slice(0,4));
+  const [ano, setAno] = useState(anoAtual);
+  const planos = useMemo(() => [...new Set(guias.map(g=>g.convenio).filter(Boolean))].sort(), [guias]);
+  const [plano, setPlano] = useState("");
+  useEffect(() => { if (!plano && planos.length>0) setPlano(planos[0]); }, [planos]);
+
+  const pacientesDoPlano = useMemo(() => {
+    return clients.filter(c => c.pagamento?.tipo==="convenio" && c.convenio===plano).length;
+  }, [clients, plano]);
+
+  const linhasMes = useMemo(() => {
+    if (!plano) return [];
+    // Faturamento total do mês = soma do valor produzido (sessões atendidas × preço) de TODOS os planos +
+    // particular no mês — mesmo critério já usado em GuiasResumo/valorBucketPeriodo, para manter a %
+    // consistente com o resto do sistema em vez de inventar uma nova base de cálculo.
+    const bucketsPresentes = [...new Set(clients.map(getBucketCliente))];
+    return MESES_PT.map((nomeMes, idx) => {
+      const mes = idx + 1;
+      const guiasDoMesPlano = guias.filter(g => g.convenio===plano && g.dataEnvio && noPeriodo(g.dataEnvio, "mes", mes, ano));
+      const valorEnviado = guiasDoMesPlano.reduce((s,g)=>s+valorGuiaPendente(g, procedimentosTuss, convenios), 0);
+      const faturamentoTotalMes = bucketsPresentes.reduce((s,b)=>s+valorBucketPeriodo(appointments, clients, b, ano, mes), 0);
+      const percentual = faturamentoTotalMes>0 ? (valorEnviado/faturamentoTotalMes*100) : 0;
+      return { mes: nomeMes, valorEnviado, faturamentoTotalMes, percentual, qtdGuias: guiasDoMesPlano.length };
+    });
+  }, [plano, ano, guias, clients, appointments, procedimentosTuss, convenios]);
+
+  const totalAnoEnviado = linhasMes.reduce((s,l)=>s+l.valorEnviado,0);
+  const anos = [anoAtual-1, anoAtual, anoAtual+1];
+
+  return (
+    <div>
+      <div className="flex items-center gap-3 mb-4 flex-wrap">
+        <Field label="Plano (convênio)"><select className={inputCls + " max-w-[220px]"} value={plano} onChange={e=>setPlano(e.target.value)}>
+          {planos.length===0 && <option value="">Nenhum plano com guia cadastrada</option>}
+          {planos.map(p => <option key={p} value={p}>{p}</option>)}
+        </select></Field>
+        <Field label="Ano"><select className={inputCls + " max-w-[110px]"} value={ano} onChange={e=>setAno(Number(e.target.value))}>
+          {anos.map(a => <option key={a} value={a}>{a}</option>)}
+        </select></Field>
+      </div>
+
+      <div className="grid grid-cols-2 md:grid-cols-3 gap-3 mb-4">
+        <KpiCard label="Pacientes desse plano" value={pacientesDoPlano} tone="teal" />
+        <KpiCard label={`Total enviado em ${ano}`} value={fmtBRL(totalAnoEnviado)} tone="green" />
+        <KpiCard label="Guias enviadas no ano" value={linhasMes.reduce((s,l)=>s+l.qtdGuias,0)} tone="amber" />
+      </div>
+
+      <div className="bg-white rounded-xl border border-slate-200 overflow-x-auto">
+        <table className="w-full text-sm">
+          <thead className="bg-slate-50 text-slate-500 text-xs uppercase">
+            <tr><th className="text-left px-3 py-2">Mês</th><th className="text-right px-3 py-2">Guias enviadas</th><th className="text-right px-3 py-2">Valor enviado</th><th className="text-right px-3 py-2">% do faturamento total do mês</th></tr>
+          </thead>
+          <tbody>
+            {!plano && <tr><td colSpan="4" className="text-center py-4 text-slate-400">Selecione um plano.</td></tr>}
+            {plano && linhasMes.map(l => (
+              <tr key={l.mes} className="border-t border-slate-100">
+                <td className="px-3 py-1.5 font-medium text-slate-800">{l.mes}</td>
+                <td className="px-3 py-1.5 text-right text-slate-600">{l.qtdGuias}</td>
+                <td className="px-3 py-1.5 text-right text-slate-700 font-medium">{fmtBRL(l.valorEnviado)}</td>
+                <td className="px-3 py-1.5 text-right text-slate-600">{l.percentual.toFixed(1)}%</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      <p className="text-[11px] text-slate-400 mt-2">Valor enviado = soma do valor das guias desse plano com data de envio no mês (preço do procedimento TUSS pelo convênio × sessões autorizadas, menos glosa). % do faturamento = valor enviado desse plano ÷ faturamento total produzido no mês (todos os planos + particular).</p>
     </div>
   );
 }
@@ -5325,14 +5633,26 @@ function calcCaixaDia(lancamentos, data){
 // Vendas: painel dedicado para acompanhar as vendas de pacotes/produtos vinculadas ao cadastro do
 // cliente (aba Clientes) e a comissão de cada atendente sobre elas. Ver saveClient() no App.
 function VendasPanel({vendas, professionals}) {
+  const [view, setView] = useState("geral"); // geral | vendedora
   const [modo, setModo] = useState("mes"); // mes | ano
   const [mesRef, setMesRef] = useState(TODAY.slice(0,7));
   const [anoRef, setAnoRef] = useState(TODAY.slice(0,4));
+  // Sub-aba "Por vendedora" (pedida explicitamente pelo usuário: "uma sub aba para ver os resultados de
+  // cada vendedora cadastrada — vendas e comissão"). Lista de vendedoras = quem já tem pelo menos uma
+  // venda registrada, não todos os profissionais — evita mostrar gente que nunca vendeu nada.
+  const vendedorasComVenda = useMemo(() => {
+    const map = {};
+    (vendas||[]).forEach(v => { const key = v.vendedorId || v.vendedorNome; if (!map[key]) map[key] = { id:key, nome:v.vendedorNome }; });
+    return Object.values(map).sort((a,b)=>a.nome.localeCompare(b.nome));
+  }, [vendas]);
+  const [vendedoraId, setVendedoraId] = useState("");
+  useEffect(() => { if (!vendedoraId && vendedorasComVenda.length>0) setVendedoraId(vendedorasComVenda[0].id); }, [vendedorasComVenda]);
 
   const vendasFiltradas = useMemo(() => {
-    return (vendas||[]).filter(v => modo==="ano" ? v.data.slice(0,4)===anoRef : v.data.slice(0,7)===mesRef)
-      .sort((a,b) => b.data.localeCompare(a.data));
-  }, [vendas, modo, mesRef, anoRef]);
+    let lista = (vendas||[]).filter(v => modo==="ano" ? v.data.slice(0,4)===anoRef : v.data.slice(0,7)===mesRef);
+    if (view==="vendedora" && vendedoraId) lista = lista.filter(v => (v.vendedorId || v.vendedorNome) === vendedoraId);
+    return lista.sort((a,b) => b.data.localeCompare(a.data));
+  }, [vendas, modo, mesRef, anoRef, view, vendedoraId]);
 
   const totalVendido = vendasFiltradas.reduce((s,v)=>s+v.valorFinal,0);
   const totalComissao = vendasFiltradas.reduce((s,v)=>s+v.comissaoValor,0);
@@ -5365,33 +5685,50 @@ function VendasPanel({vendas, professionals}) {
         </div>
       </div>
 
+      <div className="flex gap-1 bg-slate-200/60 rounded-lg p-1 mb-3 w-fit">
+        {[["geral","Geral"],["vendedora","Por vendedora"]].map(([id,label]) => (
+          <button key={id} onClick={()=>setView(id)} className={"px-3 py-1.5 rounded-md text-sm font-medium " + (view===id ? "bg-white shadow text-teal-700" : "text-slate-500")}>{label}</button>
+        ))}
+      </div>
+
+      {view==="vendedora" && (
+        <div className="mb-3">
+          <Field label="Vendedora"><select className={inputCls + " max-w-sm"} value={vendedoraId} onChange={e=>setVendedoraId(e.target.value)}>
+            {vendedorasComVenda.length===0 && <option value="">Nenhuma venda registrada ainda</option>}
+            {vendedorasComVenda.map(v => <option key={v.id} value={v.id}>{v.nome}</option>)}
+          </select></Field>
+        </div>
+      )}
+
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
         <KpiCard label="Vendas no período" value={vendasFiltradas.length} tone="teal" />
         <KpiCard label="Total vendido" value={fmtBRL(totalVendido)} tone="green" />
-        <KpiCard label="Comissão total" value={fmtBRL(totalComissao)} tone="amber" sub="a pagar aos vendedores" />
+        <KpiCard label="Comissão total" value={fmtBRL(totalComissao)} tone="amber" sub={view==="vendedora" ? "a pagar a essa vendedora" : "a pagar aos vendedores"} />
         <KpiCard label="Ticket médio" value={fmtBRL(ticketMedio)} />
       </div>
 
-      <div className="bg-white rounded-xl border border-slate-200 p-4 mb-4">
-        <div className="text-sm font-medium text-slate-700 mb-2">Por vendedor (atendente)</div>
-        <table className="w-full text-sm">
-          <thead className="text-xs text-slate-400 uppercase"><tr><th className="text-left py-1">Vendedor</th><th className="text-right py-1">Vendas</th><th className="text-right py-1">Total vendido</th><th className="text-right py-1">Comissão</th></tr></thead>
-          <tbody>
-            {porVendedor.length===0 && <tr><td colSpan="4" className="py-3 text-slate-400 text-center">Nenhuma venda no período.</td></tr>}
-            {porVendedor.map((v,i) => (
-              <tr key={i} className="border-t border-slate-100">
-                <td className="py-1.5 font-medium">{v.nome}</td>
-                <td className="py-1.5 text-right">{v.qtd}</td>
-                <td className="py-1.5 text-right">{fmtBRL(v.total)}</td>
-                <td className="py-1.5 text-right text-amber-600 font-medium">{fmtBRL(v.comissao)}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+      {view==="geral" && (
+        <div className="bg-white rounded-xl border border-slate-200 p-4 mb-4">
+          <div className="text-sm font-medium text-slate-700 mb-2">Por vendedor (atendente)</div>
+          <table className="w-full text-sm">
+            <thead className="text-xs text-slate-400 uppercase"><tr><th className="text-left py-1">Vendedor</th><th className="text-right py-1">Vendas</th><th className="text-right py-1">Total vendido</th><th className="text-right py-1">Comissão</th></tr></thead>
+            <tbody>
+              {porVendedor.length===0 && <tr><td colSpan="4" className="py-3 text-slate-400 text-center">Nenhuma venda no período.</td></tr>}
+              {porVendedor.map((v,i) => (
+                <tr key={i} className="border-t border-slate-100">
+                  <td className="py-1.5 font-medium">{v.nome}</td>
+                  <td className="py-1.5 text-right">{v.qtd}</td>
+                  <td className="py-1.5 text-right">{fmtBRL(v.total)}</td>
+                  <td className="py-1.5 text-right text-amber-600 font-medium">{fmtBRL(v.comissao)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
 
       <div className="bg-white rounded-xl border border-slate-200 p-4">
-        <div className="text-sm font-medium text-slate-700 mb-2">Vendas individuais</div>
+        <div className="text-sm font-medium text-slate-700 mb-2">{view==="vendedora" ? "Vendas dessa vendedora" : "Vendas individuais"}</div>
         <table className="w-full text-sm">
           <thead className="text-xs text-slate-400 uppercase"><tr><th className="text-left py-1">Data</th><th className="text-left py-1">Cliente</th><th className="text-left py-1">Produto/pacote</th><th className="text-left py-1">Forma</th><th className="text-left py-1">Parcelas</th><th className="text-left py-1">Vendedor</th><th className="text-right py-1">Valor</th><th className="text-right py-1">%</th><th className="text-right py-1">Comissão</th></tr></thead>
           <tbody>
@@ -5419,9 +5756,14 @@ function VendasPanel({vendas, professionals}) {
   );
 }
 
-function CaixaPanel({lancamentos, fechamentos, onNew, onEdit, onFechar, onReabrir}) {
+function CaixaPanel({lancamentos, fechamentos, currentUser, onNew, onEdit, onFechar, onReabrir}) {
   const [data, setData] = useState(TODAY);
   const [valorContado, setValorContado] = useState("");
+  // Lançamento gerencial (pedido explicitamente pelo usuário: "um lançamento manual de forma gerencial
+  // onde somente o gestor ou quem tiver acesso pode ver"). Entra normalmente nos totais/KPIs do dia
+  // (calcCaixaDia não diferencia gerencial de comum), mas a linha fica mascarada na tabela para quem não
+  // tem permissão — só admin/financeiro veem descrição, paciente, forma e valor de verdade.
+  const podeVerGerencial = currentUser?.role === "admin" || currentUser?.role === "financeiro";
   const calc = useMemo(() => calcCaixaDia(lancamentos, data), [lancamentos, data]);
   const fechamento = fechamentos[data];
   const fechado = !!fechamento;
@@ -5488,9 +5830,23 @@ function CaixaPanel({lancamentos, fechamentos, onNew, onEdit, onFechar, onReabri
             {calc.doDia.length===0 && <tr><td colSpan="7" className="text-center py-4 text-slate-400">Nenhum lançamento neste dia.</td></tr>}
             {calc.doDia.map(l => {
               const cfg = TIPO_LANCAMENTO[l.tipo];
+              const mascarado = l.gerencial && !podeVerGerencial;
+              if (mascarado) {
+                return (
+                  <tr key={l.id} className="border-t border-slate-100 bg-slate-50/50">
+                    <td className="px-4 py-2"><span className={"text-xs font-medium rounded-full px-2 py-1 " + cfg.badge}>{cfg.label}</span></td>
+                    <td className="px-4 py-2 text-slate-400 italic" colSpan="4">🔒 Lançamento gerencial — visível só para gestor/financeiro.</td>
+                    <td className="px-4 py-2 text-right text-slate-400 italic">•••••</td>
+                    <td className="px-4 py-2 text-right"></td>
+                  </tr>
+                );
+              }
               return (
                 <tr key={l.id} className="border-t border-slate-100">
-                  <td className="px-4 py-2"><span className={"text-xs font-medium rounded-full px-2 py-1 " + cfg.badge}>{cfg.label}</span></td>
+                  <td className="px-4 py-2">
+                    <span className={"text-xs font-medium rounded-full px-2 py-1 " + cfg.badge}>{cfg.label}</span>
+                    {l.gerencial && <span className="ml-1 text-xs" title="Lançamento gerencial">🔒</span>}
+                  </td>
                   <td className="px-4 py-2 text-slate-600">{l.clienteNome || "—"}</td>
                   <td className="px-4 py-2 text-slate-500">{l.tipo==="receita" ? (ORIGENS_PAGAMENTO[l.origemPagamento] || "—") : "—"}</td>
                   <td className="px-4 py-2 text-slate-500">{FORMAS_PAGAMENTO[l.formaPagamento] || "—"}</td>
@@ -5544,7 +5900,7 @@ function CaixaPanel({lancamentos, fechamentos, onNew, onEdit, onFechar, onReabri
   );
 }
 
-function LancamentoModal({data, unidades, clients, onClose, onSave}) {
+function LancamentoModal({data, unidades, clients, podeVerGerencial, onClose, onSave}) {
   const [form, setForm] = useState({ unidadeId: unidades?.[0]?.id||"", origemPagamento: "particular", ...data });
   const precisaForma = form.tipo === "receita" || form.tipo === "despesa";
   const ehReceita = form.tipo === "receita";
@@ -5596,9 +5952,19 @@ function LancamentoModal({data, unidades, clients, onClose, onSave}) {
       )}
       <Field label="Valor (R$)"><MoneyInput className={inputCls} value={form.valor} onChange={v=>setForm({...form,valor:v})} /></Field>
       <Field label="Descrição"><input className={inputCls} value={form.descricao} onChange={e=>setForm({...form,descricao:e.target.value})} /></Field>
+      {/* Lançamento gerencial (pedido explicitamente pelo usuário: "um lançamento manual de forma
+          gerencial onde somente o gestor ou quem tiver acesso pode ver"). Só quem já tem permissão de ver
+          lançamentos gerenciais consegue marcar/desmarcar essa opção — para os demais perfis o campo nem
+          aparece, então eles nunca conseguem criar um lançamento oculto. */}
+      {podeVerGerencial && (
+        <label className="flex items-center gap-2 text-sm text-slate-700 mb-3 bg-slate-50 border border-slate-200 rounded-lg px-3 py-2">
+          <input type="checkbox" checked={!!form.gerencial} onChange={e=>setForm({...form,gerencial:e.target.checked})} />
+          🔒 Lançamento gerencial (entra nos totais do caixa, mas a linha fica visível só para gestor/financeiro)
+        </label>
+      )}
       <div className="flex justify-end gap-2 mt-4">
         <button onClick={onClose} className="px-4 py-2 text-sm rounded-lg border border-slate-300">Cancelar</button>
-        <button onClick={()=>onSave({...form, formaPagamento: precisaForma ? form.formaPagamento : "dinheiro", origemPagamento: ehReceita ? (form.origemPagamento||"particular") : null, clienteId: ehReceita ? (form.clienteId||null) : null, clienteNome: ehReceita ? (form.clienteNome||null) : null})} className="px-4 py-2 text-sm rounded-lg bg-teal-600 text-white hover:bg-teal-700">{ehEdicao ? "Salvar alterações" : "Lançar"}</button>
+        <button onClick={()=>onSave({...form, formaPagamento: precisaForma ? form.formaPagamento : "dinheiro", origemPagamento: ehReceita ? (form.origemPagamento||"particular") : null, clienteId: ehReceita ? (form.clienteId||null) : null, clienteNome: ehReceita ? (form.clienteNome||null) : null, gerencial: podeVerGerencial ? !!form.gerencial : false})} className="px-4 py-2 text-sm rounded-lg bg-teal-600 text-white hover:bg-teal-700">{ehEdicao ? "Salvar alterações" : "Lançar"}</button>
       </div>
     </Modal>
   );
@@ -6025,7 +6391,7 @@ function valorGuiaPendente(guia, procedimentosTuss, convenios){
   return Math.max(0, precoUnit*guia.quantidadeAutorizada - (guia.valorGlosa||0));
 }
 
-function Dashboard({clients, appointments, guias, lancamentos, fichas, produtos, convenios, procedimentosTuss, vendas}) {
+function DashboardPainel({clients, appointments, guias, lancamentos, fichas, produtos, convenios, procedimentosTuss, vendas}) {
   const caixaHoje = useMemo(() => calcCaixaDia(lancamentos, TODAY), [lancamentos]);
   const fichasPendentes = fichas.filter(f=>f.status==="pendente_paciente").length;
   const fichasAssinadas = fichas.filter(f=>f.status==="assinada").length;
@@ -6251,18 +6617,15 @@ function Dashboard({clients, appointments, guias, lancamentos, fichas, produtos,
       </div>
 
       <div className="bg-white rounded-xl border border-slate-200 p-4 mt-4">
-        <div className="text-sm font-medium text-slate-700 mb-2">Resumo financeiro consolidado do dia (DRE simplificado)</div>
+        <div className="text-sm font-medium text-slate-700 mb-2">Resultado de caixa do dia</div>
         <table className="w-full text-sm">
           <tbody>
-            <tr className="border-b border-slate-100"><td className="py-1.5 text-slate-600">Receita de atendimentos (sessões confirmadas)</td><td className="py-1.5 text-right font-medium text-green-600">{fmtBRL(stats.valorProduzido)}</td></tr>
-            <tr className="border-b border-slate-100"><td className="py-1.5 text-slate-600">(−) Glosas de convênio</td><td className="py-1.5 text-right font-medium text-red-600">{fmtBRL(stats.totalGlosas)}</td></tr>
-            <tr className="border-b border-slate-100"><td className="py-1.5 text-slate-600 font-medium">(=) Receita líquida de atendimentos</td><td className="py-1.5 text-right font-semibold">{fmtBRL(stats.valorRecebido)}</td></tr>
             <tr className="border-b border-slate-100"><td className="py-1.5 text-slate-600">Entradas de caixa hoje (todas as formas)</td><td className="py-1.5 text-right font-medium text-green-600">{fmtBRL(caixaHoje.totalReceitas)}</td></tr>
             <tr className="border-b border-slate-100"><td className="py-1.5 text-slate-600">(−) Despesas de caixa hoje</td><td className="py-1.5 text-right font-medium text-red-600">{fmtBRL(caixaHoje.totalDespesas)}</td></tr>
             <tr><td className="py-1.5 text-slate-700 font-semibold">(=) Resultado de caixa do dia</td><td className={"py-1.5 text-right font-bold " + (caixaHoje.resultadoDia>=0?"text-green-600":"text-red-600")}>{fmtBRL(caixaHoje.resultadoDia)}</td></tr>
           </tbody>
         </table>
-        <p className="text-[11px] text-slate-400 mt-2">Sangrias e reforços não entram no resultado (são apenas movimentação física de caixa) — veja o detalhamento na aba Fluxo de Caixa.</p>
+        <p className="text-[11px] text-slate-400 mt-2">Sangrias e reforços não entram no resultado (são apenas movimentação física de caixa) — veja o detalhamento na aba Fluxo de Caixa. Para o demonstrativo de resultado por período (DRE), veja a sub-aba "DRE" acima.</p>
       </div>
 
       <div className="bg-white rounded-xl border border-slate-200 p-4 mt-4">
@@ -6310,6 +6673,190 @@ function Dashboard({clients, appointments, guias, lancamentos, fichas, produtos,
           </table>
         </div>
       )}
+    </div>
+  );
+}
+
+// Sub-aba "DRE": demonstrativo de resultado gerencial por período (mês dentro do ano, ou compilado/ano
+// todo), mais uma tabela de evolução mensal do ano selecionado — espelhando a estrutura da planilha de
+// referência (Receita bruta → deduções → custos → despesas → EBITDA → lucro líquido → margens).
+function DashboardDRE({appointments, clients, guias, lancamentos, vendas, professionals}) {
+  const anoAtual = Number(TODAY.slice(0,4));
+  const mesAtualNum = Number(TODAY.slice(5,7));
+  const [ano, setAno] = useState(anoAtual);
+  const [mes, setMes] = useState(mesAtualNum); // 0 = compilado (ano todo)
+  const anos = [anoAtual-1, anoAtual, anoAtual+1];
+  const ctx = {appointments, clients, guias, lancamentos, vendas, professionals};
+
+  const dre = useMemo(() => computeDRE(ano, mes, ctx), [appointments, clients, guias, lancamentos, vendas, professionals, ano, mes]);
+  const evolucaoMensal = useMemo(() => MESES_PT.map((nome, idx) => ({ nome, ...computeDRE(ano, idx+1, ctx) })), [appointments, clients, guias, lancamentos, vendas, professionals, ano]);
+
+  const linhaDRE = (label, valor, opts={}) => (
+    <tr className="border-b border-slate-100">
+      <td className={"py-1.5 " + (opts.bold ? "text-slate-800 font-semibold" : "text-slate-600")}>{label}</td>
+      <td className={"py-1.5 text-right " + (opts.bold ? "font-bold" : "font-medium") + " " + (opts.tone==="red" ? "text-red-600" : opts.tone==="green" ? "text-green-600" : "text-slate-700")}>{fmtBRL(valor)}</td>
+    </tr>
+  );
+
+  return (
+    <div>
+      <div className="flex items-center gap-3 mb-3 flex-wrap">
+        <Field label="Ano"><select className={inputCls + " max-w-[110px]"} value={ano} onChange={e=>setAno(Number(e.target.value))}>
+          {anos.map(a => <option key={a} value={a}>{a}</option>)}
+        </select></Field>
+        <Field label="Período"><select className={inputCls + " max-w-[180px]"} value={mes} onChange={e=>setMes(Number(e.target.value))}>
+          <option value={0}>Compilado (ano todo)</option>
+          {MESES_PT.map((m,i) => <option key={i} value={i+1}>{m}</option>)}
+        </select></Field>
+      </div>
+      <p className="text-xs text-slate-400 mb-3">DRE gerencial simplificado, referente a {mes ? `${MESES_PT[mes-1]}/${ano}` : `${ano} (compilado)`}. Custos com profissionais (salário/custo fixo) são estimados a partir do cadastro — 12× o valor mensal quando o período é "compilado". Este protótipo não modela impostos nem depreciação.</p>
+
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
+        <KpiCard label="Receita bruta" value={fmtBRL(dre.receitaBruta)} tone="teal" />
+        <KpiCard label="Lucro bruto" value={fmtBRL(dre.lucroBruto)} tone={dre.lucroBruto>=0?"green":"red"} sub={`margem ${dre.margemBruta.toFixed(1)}%`} />
+        <KpiCard label="Resultado operacional (EBITDA)" value={fmtBRL(dre.resultadoOperacional)} tone={dre.resultadoOperacional>=0?"green":"red"} />
+        <KpiCard label="Lucro líquido" value={fmtBRL(dre.lucroLiquido)} tone={dre.lucroLiquido>=0?"green":"red"} sub={`margem ${dre.margemLiquida.toFixed(1)}%`} />
+      </div>
+
+      <div className="bg-white rounded-xl border border-slate-200 p-4 mb-4">
+        <div className="text-sm font-medium text-slate-700 mb-2">Demonstrativo de resultado</div>
+        <table className="w-full text-sm">
+          <tbody>
+            {linhaDRE("Receita bruta (produção — sessões atendidas)", dre.receitaBruta)}
+            {linhaDRE("(−) Deduções (glosas de convênio)", dre.deducoes, {tone:"red"})}
+            {linhaDRE("(=) Receita líquida", dre.receitaLiquida, {bold:true})}
+            {linhaDRE("(−) Custos com profissionais (comissão + custo fixo)", dre.custosProfissionais, {tone:"red"})}
+            {linhaDRE("(−) Custos com comissão de vendas", dre.custosComissaoVendas, {tone:"red"})}
+            {linhaDRE("(=) Lucro bruto", dre.lucroBruto, {bold:true, tone: dre.lucroBruto>=0?"green":"red"})}
+            {linhaDRE("(−) Despesas operacionais (caixa)", dre.despesasOperacionais, {tone:"red"})}
+            {linhaDRE("(=) Resultado operacional (EBITDA simplificado)", dre.resultadoOperacional, {bold:true, tone: dre.resultadoOperacional>=0?"green":"red"})}
+            {linhaDRE("(=) Lucro líquido do período", dre.lucroLiquido, {bold:true, tone: dre.lucroLiquido>=0?"green":"red"})}
+          </tbody>
+        </table>
+      </div>
+
+      <div className="bg-white rounded-xl border border-slate-200 overflow-x-auto">
+        <div className="text-sm font-medium text-slate-700 p-4 pb-2">Evolução mensal — {ano}</div>
+        <table className="w-full text-sm">
+          <thead className="bg-slate-50 text-slate-500 text-xs uppercase">
+            <tr>
+              <th className="text-left px-3 py-2">Mês</th>
+              <th className="text-right px-3 py-2">Receita bruta</th>
+              <th className="text-right px-3 py-2">Custos totais</th>
+              <th className="text-right px-3 py-2">Despesas</th>
+              <th className="text-right px-3 py-2">Lucro líquido</th>
+              <th className="text-right px-3 py-2">Margem líquida</th>
+            </tr>
+          </thead>
+          <tbody>
+            {evolucaoMensal.map(l => (
+              <tr key={l.nome} className="border-t border-slate-100">
+                <td className="px-3 py-1.5 font-medium text-slate-800">{l.nome}</td>
+                <td className="px-3 py-1.5 text-right text-slate-600">{fmtBRL(l.receitaBruta)}</td>
+                <td className="px-3 py-1.5 text-right text-red-600">{fmtBRL(l.custosTotais)}</td>
+                <td className="px-3 py-1.5 text-right text-red-600">{fmtBRL(l.despesasOperacionais)}</td>
+                <td className={"px-3 py-1.5 text-right font-medium " + (l.lucroLiquido>=0?"text-green-600":"text-red-600")}>{fmtBRL(l.lucroLiquido)}</td>
+                <td className="px-3 py-1.5 text-right text-slate-600">{l.margemLiquida.toFixed(1)}%</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+// Sub-aba "Indicadores Operacionais": atendimentos, comparecimento, ocupação, ticket médio, aquisição e
+// possível evasão de pacientes — tudo calculado a partir de dados já existentes no sistema (não modela
+// CAC/LTV de marketing pois o app não captura investimento em mídia/aquisição).
+function DashboardIndicadores({appointments, clients, professionals}) {
+  const anoAtual = Number(TODAY.slice(0,4));
+  const mesAtualNum = Number(TODAY.slice(5,7));
+  const [ano, setAno] = useState(anoAtual);
+  const [mes, setMes] = useState(mesAtualNum); // 0 = compilado (ano todo)
+  const anos = [anoAtual-1, anoAtual, anoAtual+1];
+  const periodoTipo = mes ? "mes" : "ano";
+  const LIMITE_EVASAO_DIAS = 60;
+
+  const indicadores = useMemo(() => {
+    const apptsPeriodo = appointments.filter(a => noPeriodo(a.data, periodoTipo, mes, ano));
+    const total = apptsPeriodo.length;
+    const atendidos = apptsPeriodo.filter(a=>a.status==="atendido").length;
+    const desmarcados = apptsPeriodo.filter(a=>a.status==="desmarcado").length;
+    const faltas = apptsPeriodo.filter(a=>a.status==="faltou").length;
+    const avaliacoes = apptsPeriodo.filter(a=>(a.tipo||"sessao")==="avaliacao").length;
+    const taxaComparecimento = total>0 ? (atendidos/total*100) : 0;
+    const taxaFaltas = total>0 ? (faltas/total*100) : 0;
+    const taxaDesmarcacao = total>0 ? (desmarcados/total*100) : 0;
+
+    const faturamentoPeriodo = apptsPeriodo.filter(a=>a.status==="atendido").reduce((s,a) => { const c = clients.find(cl=>cl.id===a.clienteId); return s + (c?.valorSessao||0); }, 0);
+    const ticketMedio = atendidos>0 ? (faturamentoPeriodo/atendidos) : 0;
+
+    const novosClientes = clients.filter(c => c.dataInicio && noPeriodo(c.dataInicio, periodoTipo, mes, ano)).length;
+    const altas = clients.filter(c => c.alta && noPeriodo(c.alta.data, periodoTipo, mes, ano)).length;
+    const pacientesAtivos = clients.filter(c => !c.alta).length;
+    const pacientesUnicosNoPeriodo = new Set(apptsPeriodo.map(a=>a.clienteId)).size;
+
+    const mesesNoPeriodo = mes ? 1 : 12;
+    const horasDisponiveisTotais = professionals.reduce((s,prof) => s + (prof.dias?.length||0) * horasEntre(prof.horaInicio, prof.horaFim) * 4.33 * mesesNoPeriodo, 0);
+    const taxaOcupacaoMedia = horasDisponiveisTotais>0 ? (atendidos/horasDisponiveisTotais*100) : 0;
+
+    const evasao = clients.filter(c => {
+      if (c.alta) return false;
+      const apptsCliente = appointments.filter(a=>a.clienteId===c.id && a.status==="atendido");
+      if (apptsCliente.length===0) return false;
+      const ultima = apptsCliente.reduce((max,a) => a.data>max ? a.data : max, apptsCliente[0].data);
+      const dias = Math.round((new Date(TODAY+"T00:00:00") - new Date(ultima+"T00:00:00"))/86400000);
+      return dias > LIMITE_EVASAO_DIAS;
+    }).length;
+
+    return { total, atendidos, desmarcados, faltas, avaliacoes, taxaComparecimento, taxaFaltas, taxaDesmarcacao, ticketMedio, novosClientes, altas, pacientesAtivos, pacientesUnicosNoPeriodo, taxaOcupacaoMedia, evasao };
+  }, [appointments, clients, professionals, ano, mes, periodoTipo]);
+
+  return (
+    <div>
+      <div className="flex items-center gap-3 mb-3 flex-wrap">
+        <Field label="Ano"><select className={inputCls + " max-w-[110px]"} value={ano} onChange={e=>setAno(Number(e.target.value))}>
+          {anos.map(a => <option key={a} value={a}>{a}</option>)}
+        </select></Field>
+        <Field label="Período"><select className={inputCls + " max-w-[180px]"} value={mes} onChange={e=>setMes(Number(e.target.value))}>
+          <option value={0}>Compilado (ano todo)</option>
+          {MESES_PT.map((m,i) => <option key={i} value={i+1}>{m}</option>)}
+        </select></Field>
+      </div>
+      <p className="text-xs text-slate-400 mb-3">Indicadores referentes a {mes ? `${MESES_PT[mes-1]}/${ano}` : `${ano} (compilado)`}. Ocupação assume ~1h por sessão confirmada frente à disponibilidade cadastrada dos profissionais; evasão considera pacientes ativos (sem alta) sem nenhum atendimento há mais de {LIMITE_EVASAO_DIAS} dias.</p>
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        <KpiCard label="Atendimentos realizados" value={indicadores.atendidos} tone="green" sub={`de ${indicadores.total} agendamentos`} />
+        <KpiCard label="Taxa de comparecimento" value={`${indicadores.taxaComparecimento.toFixed(0)}%`} tone="teal" />
+        <KpiCard label="Taxa de faltas" value={`${indicadores.taxaFaltas.toFixed(0)}%`} tone="red" />
+        <KpiCard label="Taxa de desmarcação" value={`${indicadores.taxaDesmarcacao.toFixed(0)}%`} tone="amber" />
+        <KpiCard label="Ticket médio por sessão" value={fmtBRL(indicadores.ticketMedio)} tone="teal" />
+        <KpiCard label="Taxa de ocupação média" value={`${indicadores.taxaOcupacaoMedia.toFixed(0)}%`} tone={indicadores.taxaOcupacaoMedia>=70?"green":indicadores.taxaOcupacaoMedia>=40?"amber":"red"} />
+        <KpiCard label="Pacientes atendidos no período" value={indicadores.pacientesUnicosNoPeriodo} tone="default" />
+        <KpiCard label="Avaliações no período" value={indicadores.avaliacoes} tone="default" />
+        <KpiCard label="Novos clientes" value={indicadores.novosClientes} tone="teal" />
+        <KpiCard label="Altas no período" value={indicadores.altas} tone="green" />
+        <KpiCard label="Pacientes ativos (base atual)" value={indicadores.pacientesAtivos} tone="default" />
+        <KpiCard label={`Possível evasão (>${LIMITE_EVASAO_DIAS}d sem sessão)`} value={indicadores.evasao} tone={indicadores.evasao>0?"red":"default"} sub="pacientes ativos sem atendimento recente" />
+      </div>
+    </div>
+  );
+}
+
+// Wrapper com as 3 sub-abas do Dashboard: Painel (visão geral já existente), DRE (demonstrativo de
+// resultado por período) e Indicadores Operacionais (atendimentos, ocupação, ticket médio, evasão).
+function DashboardPanel(props) {
+  const [view, setView] = useState("painel");
+  return (
+    <div>
+      <div className="flex gap-1 bg-slate-200/60 rounded-lg p-1 mb-3 w-fit">
+        {[["painel","Painel"],["dre","DRE"],["indicadores","Indicadores Operacionais"]].map(([id,label]) => (
+          <button key={id} onClick={()=>setView(id)} className={"px-3 py-1.5 rounded-md text-sm font-medium " + (view===id ? "bg-white shadow text-teal-700" : "text-slate-500")}>{label}</button>
+        ))}
+      </div>
+      {view === "painel" && <DashboardPainel {...props} />}
+      {view === "dre" && <DashboardDRE {...props} />}
+      {view === "indicadores" && <DashboardIndicadores {...props} />}
     </div>
   );
 }
