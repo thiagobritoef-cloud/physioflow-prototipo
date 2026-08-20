@@ -289,12 +289,17 @@ const procedimentosTussIniciais = [
 
 /* ---------------- Catálogo: Planos de Saúde e Produtos/Serviços ---------------- */
 const conveniosIniciais = [
-  { id:"cv1", nome:"Amil", registroANS:"326305", telefone:"0800-701-2222", prazoMedioPagamentoDias:45, ativo:true },
-  { id:"cv2", nome:"Bradesco Saúde", registroANS:"005711", telefone:"0800-701-4988", prazoMedioPagamentoDias:38, ativo:true },
-  { id:"cv3", nome:"SulAmérica", registroANS:"006246", telefone:"0800-070-3773", prazoMedioPagamentoDias:52, ativo:true },
-  { id:"cv4", nome:"Unimed", registroANS:"", telefone:"0800-940-0300", prazoMedioPagamentoDias:40, ativo:true },
-  { id:"cv5", nome:"Porto Seguro Saúde", registroANS:"005711", telefone:"0800-727-7278", prazoMedioPagamentoDias:35, ativo:true },
-  { id:"cv6", nome:"Particular", registroANS:"", telefone:"", prazoMedioPagamentoDias:0, ativo:true },
+  { id:"cv1", nome:"Amil", registroANS:"326305", telefone:"0800-701-2222", prazoMedioPagamentoDias:45, ativo:true,
+    documentosExigidos:[{id:"cv1d1", nome:"Pedido médico", requerDadosPedido:true}, {id:"cv1d2", nome:"Carteirinha do convênio", requerDadosPedido:false}, {id:"cv1d3", nome:"RG ou CPF", requerDadosPedido:false}] },
+  { id:"cv2", nome:"Bradesco Saúde", registroANS:"005711", telefone:"0800-701-4988", prazoMedioPagamentoDias:38, ativo:true,
+    documentosExigidos:[{id:"cv2d1", nome:"Pedido médico", requerDadosPedido:true}, {id:"cv2d2", nome:"Carteirinha do convênio", requerDadosPedido:false}] },
+  { id:"cv3", nome:"SulAmérica", registroANS:"006246", telefone:"0800-070-3773", prazoMedioPagamentoDias:52, ativo:true,
+    documentosExigidos:[{id:"cv3d1", nome:"Pedido médico", requerDadosPedido:true}, {id:"cv3d2", nome:"Carteirinha do convênio", requerDadosPedido:false}, {id:"cv3d3", nome:"RG ou CPF", requerDadosPedido:false}] },
+  { id:"cv4", nome:"Unimed", registroANS:"", telefone:"0800-940-0300", prazoMedioPagamentoDias:40, ativo:true,
+    documentosExigidos:[{id:"cv4d1", nome:"Pedido médico", requerDadosPedido:true}, {id:"cv4d2", nome:"Carteirinha do convênio", requerDadosPedido:false}] },
+  { id:"cv5", nome:"Porto Seguro Saúde", registroANS:"005711", telefone:"0800-727-7278", prazoMedioPagamentoDias:35, ativo:true,
+    documentosExigidos:[{id:"cv5d1", nome:"Pedido médico", requerDadosPedido:true}, {id:"cv5d2", nome:"Carteirinha do convênio", requerDadosPedido:false}] },
+  { id:"cv6", nome:"Particular", registroANS:"", telefone:"", prazoMedioPagamentoDias:0, ativo:true, documentosExigidos:[] },
   { id:"cv7", nome:"Bolsa/Social", registroANS:"", telefone:"", prazoMedioPagamentoDias:0, ativo:true },
 ];
 
@@ -1360,6 +1365,7 @@ function App({currentUser, onLogout}) {
           numeroCarteirinha:"", convenio:"", pagamento:{tipo:"particular", numeroGuia:""}, medico:"", telefoneEmergencia:"",
           tratamento:"", pacoteNome:"", sessoesTotal:0, dataInicio:TODAY, profissionaisIds:[], valorSessao:0,
           alta:null, horariosFixos:[], produtoId:null, descontoAplicado:0, parcelas:1,
+          origemCadastro:"manual", documentosAnexados:[],
         };
         const registroAtualizado = {
           ...base,
@@ -1546,10 +1552,11 @@ function App({currentUser, onLogout}) {
         )}
         {tab === "clientes" && (
           <ClientList clients={clients} professionals={professionals} appointments={appointments}
-            onNew={()=>setModal({type:"client", data:{id:"", nome:"", telefone:"", email:"", endereco:"", dataNascimento:"", cpf:"", numeroCarteirinha:"", convenio:"", pagamento:{tipo:"particular", numeroGuia:""}, medico:"", telefoneEmergencia:"", tratamento:"", pacoteNome:"", sessoesTotal:10, dataInicio:TODAY, profissionaisIds:[], valorSessao:0, alta:null, horariosFixos:[], produtoId:null, descontoAplicado:0, parcelas:1, biometriaCadastrada:false, observacoes:""}})}
+            onNew={()=>setModal({type:"client", data:{id:"", nome:"", telefone:"", email:"", endereco:"", dataNascimento:"", cpf:"", numeroCarteirinha:"", convenio:"", pagamento:{tipo:"particular", numeroGuia:""}, medico:"", telefoneEmergencia:"", tratamento:"", pacoteNome:"", sessoesTotal:10, dataInicio:TODAY, profissionaisIds:[], valorSessao:0, alta:null, horariosFixos:[], produtoId:null, descontoAplicado:0, parcelas:1, biometriaCadastrada:false, observacoes:"", origemCadastro:"manual", documentosAnexados:[]}})}
             onEdit={(c)=>setModal({type:"client", data:c})}
             onViewProfile={(c)=>setModal({type:"clientProfile", data:c})}
             onImportarLote={()=>setModal({type:"importClientes"})}
+            onGerarLinkCadastro={()=>setModal({type:"linkCadastro"})}
           />
         )}
         {tab === "profissionais" && (
@@ -1582,7 +1589,7 @@ function App({currentUser, onLogout}) {
         )}
         {tab === "catalogo" && (
           <CatalogoPanel convenios={convenios} produtos={produtos}
-            onNovoConvenio={()=>setModal({type:"convenio", data:{id:"", nome:"", registroANS:"", telefone:"", prazoMedioPagamentoDias:0, ativo:true}})}
+            onNovoConvenio={()=>setModal({type:"convenio", data:{id:"", nome:"", registroANS:"", telefone:"", prazoMedioPagamentoDias:0, ativo:true, documentosExigidos:[]}})}
             onEditarConvenio={(c)=>setModal({type:"convenio", data:c})}
             onToggleConvenioAtivo={(id)=>setConvenios(list=>list.map(c=>c.id===id?{...c,ativo:!c.ativo}:c))}
             onNovoProduto={()=>setModal({type:"produto", data:{id:"", nome:"", categoria:CATEGORIAS_PRODUTO[0], descricao:"", especialidade:"", precoBase:0, sessoesIncluidas:1, descontoMinimoPercent:0, descontoMaximoPercent:0, parcelasMaximas:1, ativo:true}})}
@@ -1639,6 +1646,9 @@ function App({currentUser, onLogout}) {
       )}
       {modal?.type === "importClientes" && (
         <ImportClientesModal onClose={()=>setModal(null)} onImportar={importarClientesLote} />
+      )}
+      {modal?.type === "linkCadastro" && (
+        <LinkCadastroModal onClose={()=>setModal(null)} />
       )}
       {modal?.type === "prof" && (
         <ProfessionalModal data={modal.data} unidades={unidades} onClose={()=>setModal(null)} onSave={saveProfessional} currentUser={currentUser} />
@@ -2401,7 +2411,7 @@ function ClientesKpiHeader({clients}) {
   );
 }
 
-function ClientList({clients, professionals, appointments, onNew, onEdit, onViewProfile, onImportarLote}) {
+function ClientList({clients, professionals, appointments, onNew, onEdit, onViewProfile, onImportarLote, onGerarLinkCadastro}) {
   const perfis = useMemo(() => {
     const map = {};
     clients.forEach(c => { map[c.id] = calcPerfilCliente(c, appointments||[], professionals); });
@@ -2431,6 +2441,7 @@ function ClientList({clients, professionals, appointments, onNew, onEdit, onView
           <BuscaRapidaBar placeholder="Buscar paciente por nome..." items={clients} getLabel={c=>c.nome} getSub={c=>c.telefone}
             onSelect={c=>onViewProfile(c)} />
           <button onClick={onImportarLote} className="px-3 py-2 text-sm rounded-lg border border-slate-300 text-slate-600 hover:bg-slate-50">Importar em lote (CSV)</button>
+          <button onClick={onGerarLinkCadastro} className="px-3 py-2 text-sm rounded-lg border border-teal-300 text-teal-700 hover:bg-teal-50">🔗 Link de cadastro</button>
           <button onClick={onNew} className="px-3 py-2 text-sm rounded-lg bg-teal-600 text-white hover:bg-teal-700">+ Novo cliente</button>
         </div>
       </div>
@@ -2491,6 +2502,47 @@ function ClientList({clients, professionals, appointments, onNew, onEdit, onView
         </table>
       </div>
     </div>
+  );
+}
+
+// Modal "Gerar link de cadastro" (RN pedida explicitamente pelo usuário): mostra a URL pública que a
+// recepção/gestão envia ao paciente (WhatsApp, e-mail etc.) para ele preencher o cadastro sozinho.
+// A URL é a própria origem do app + "?cadastro=1", que o AuthGate detecta e roteia para
+// CadastroPublicoPage sem exigir login — ver nota de limitação (mesmo navegador/dispositivo) lá.
+function LinkCadastroModal({onClose}) {
+  const [copiado, setCopiado] = useState(false);
+  const url = `${window.location.origin}${window.location.pathname}?cadastro=1`;
+
+  function copiar(){
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(url).then(()=>{ setCopiado(true); setTimeout(()=>setCopiado(false), 2000); });
+    }
+  }
+
+  return (
+    <Modal onClose={onClose} title="Link de cadastro do paciente">
+      <div className="space-y-4">
+        <p className="text-sm text-slate-600">
+          Envie este link para o paciente (WhatsApp, e-mail, SMS). Ele vai preencher os dados e enviar os
+          documentos exigidos pelo convênio sozinho — sem precisar de login.
+        </p>
+        <div className="flex items-center gap-2">
+          <input readOnly value={url} className="flex-1 border border-slate-300 rounded-lg px-3 py-2 text-sm bg-slate-50 text-slate-600" onFocus={e=>e.target.select()} />
+          <button onClick={copiar} className="px-3 py-2 text-sm rounded-lg bg-teal-600 text-white hover:bg-teal-700 whitespace-nowrap">
+            {copiado ? "Copiado!" : "Copiar"}
+          </button>
+        </div>
+        <div className="bg-amber-50 border border-amber-200 text-amber-800 rounded-lg p-3 text-xs">
+          <strong>Limitação deste protótipo:</strong> o cadastro feito pelo paciente só aparece automaticamente
+          na lista de clientes se o link for aberto neste mesmo navegador/computador. Em um paciente real usando
+          o celular dele, o sistema precisaria de um banco de dados compartilhado (já planejado, ainda não
+          implementado) para sincronizar entre dispositivos.
+        </div>
+        <div className="flex justify-end">
+          <button onClick={onClose} className="px-4 py-2 text-sm rounded-lg border border-slate-300 text-slate-600 hover:bg-slate-50">Fechar</button>
+        </div>
+      </div>
+    </Modal>
   );
 }
 
@@ -2645,6 +2697,11 @@ function ClientModal({data, abaInicial, professionals, convenios, produtos, fich
   const descontoForaDaFaixa = !!produtoSelecionado && ((Number(form.descontoAplicado)||0) > descontoMax || (Number(form.descontoAplicado)||0) < descontoMin);
   // Regra pedida explicitamente pelo usuário: usuário "profissional" (fisioterapeuta) não vê pagamentos/valores.
   const podeVerValores = currentUser?.role !== "fisioterapeuta";
+  // LGPD (feature nova: link público de cadastro): documentos enviados pelo paciente (pedido médico,
+  // carteirinha, RG/CPF) só ficam acessíveis para quem vai de fato usá-los para solicitar a guia —
+  // faturamento e o gestor. Minimização de dados: recepção, fisioterapeuta etc. não veem esses anexos.
+  const podeVerDocumentosSensiveis = currentUser?.role === "admin" || currentUser?.role === "faturamento";
+  const documentosDoCliente = data.documentosAnexados || [];
   // RN pedida explicitamente pelo usuário: mostrar as fichas clínicas do cliente aqui no próprio cadastro
   // (só faz sentido para cliente já existente — um cliente novo ainda não tem ficha nenhuma). Lista somativa
   // e só leitura (criar/editar ficha continua sendo feito pela aba Fichas Clínicas).
@@ -2661,6 +2718,7 @@ function ClientModal({data, abaInicial, professionals, convenios, produtos, fich
     {id:"observacoes", label:"Observações"},
     ...(data.id ? [{id:"fichas", label:"Fichas clínicas"}] : []),
     ...(data.id ? [{id:"evolucao", label:"Evolução"}] : []),
+    ...(data.id && podeVerDocumentosSensiveis ? [{id:"documentos", label:"Documentos"}] : []),
   ];
   const [aba, setAba] = useState(abaInicial && abas.some(a=>a.id===abaInicial) ? abaInicial : "dados");
 
@@ -2930,6 +2988,41 @@ function ClientModal({data, abaInicial, professionals, convenios, produtos, fich
             <div className="space-y-2">
               {sessoesAtendidasDoCliente.map(a => (
                 <EvolucaoRow key={a.id} appt={a} professionals={professionals} onSalvar={onSalvarEvolucao} />
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {aba === "documentos" && data.id && podeVerDocumentosSensiveis && (
+        <div>
+          <p className="text-xs text-slate-500 mb-1">Documentos enviados pelo paciente no cadastro (link público ou anexados manualmente). Acesso restrito a faturamento/gestor — LGPD (minimização de dados: outros perfis não veem estes anexos).</p>
+          {data.origemCadastro === "link_publico" && (
+            <p className="text-[11px] text-teal-700 bg-teal-50 border border-teal-200 rounded-lg px-2 py-1 inline-block mb-2">🔗 Cadastro feito pelo paciente via link público.</p>
+          )}
+          {documentosDoCliente.length === 0 ? (
+            <p className="text-sm text-slate-400 italic">Nenhum documento anexado ainda.</p>
+          ) : (
+            <div className="space-y-2">
+              {documentosDoCliente.map(doc => (
+                <div key={doc.id} className="bg-white border border-slate-200 rounded-lg p-3">
+                  <div className="flex items-center justify-between gap-2 flex-wrap">
+                    <div>
+                      <div className="text-sm font-medium text-slate-800">{doc.nome}</div>
+                      <div className="text-[11px] text-slate-400">Enviado em {fmtDataBR(doc.dataUpload)} · {doc.arquivoNome} {doc.enviadoDrive && <span className="text-teal-600">· ☁️ enviado ao Drive</span>}</div>
+                    </div>
+                    {doc.conteudoBase64 && (
+                      <a href={doc.conteudoBase64} download={doc.arquivoNome} className="text-teal-600 text-xs font-medium hover:underline flex-shrink-0">Baixar</a>
+                    )}
+                  </div>
+                  {(doc.cid || doc.dataPedido || doc.descricaoPedido) && (
+                    <div className="text-xs text-slate-600 mt-2 border-t border-slate-100 pt-2 grid grid-cols-3 gap-2">
+                      <div><span className="text-slate-400">CID:</span> {doc.cid || "—"}</div>
+                      <div><span className="text-slate-400">Data do pedido:</span> {doc.dataPedido ? fmtDataBR(doc.dataPedido) : "—"}</div>
+                      <div className="col-span-3"><span className="text-slate-400">Descrição:</span> {doc.descricaoPedido || "—"}</div>
+                    </div>
+                  )}
+                </div>
               ))}
             </div>
           )}
@@ -4431,6 +4524,28 @@ function ConvenioModal({data, onClose, onSave}) {
       <label className="flex items-center gap-2 text-sm text-slate-700 mb-3">
         <input type="checkbox" checked={!!form.ativo} onChange={e=>setForm({...form,ativo:e.target.checked})} /> Convênio ativo
       </label>
+
+      {/* Documentos exigidos (feature nova: link público de cadastro do paciente) — cada convênio define
+          quais documentos o paciente precisa enviar ao se cadastrar pelo link público (aba Clientes). O
+          documento marcado como "Pedido médico" ganha campos extras de CID/data/descrição no formulário
+          público, que o sistema valida antes de aceitar o envio (RN pedida explicitamente pelo usuário). */}
+      <div className="border-t border-slate-100 pt-3 mt-1 mb-3">
+        <span className="text-sm font-medium text-slate-700 mb-1 block">Documentos exigidos (link público de cadastro)</span>
+        <p className="text-[11px] text-slate-400 mb-2">Documentos que o paciente precisa enviar ao se cadastrar por este convênio no link público (aba Clientes → Gerar link de cadastro). Marque "Pedido médico" para o documento que deve trazer CID, data e descrição do pedido — o sistema exige e valida esses três campos antes de aceitar o cadastro.</p>
+        {(form.documentosExigidos||[]).map((doc, i) => (
+          <div key={doc.id} className="flex items-center gap-2 mb-1.5">
+            <input className={inputCls+" flex-1"} value={doc.nome} placeholder="Ex.: Pedido médico"
+              onChange={e=>setForm(f=>({...f, documentosExigidos: f.documentosExigidos.map((d,idx)=>idx===i?{...d,nome:e.target.value}:d)}))} />
+            <label className="flex items-center gap-1 text-xs text-slate-600 whitespace-nowrap flex-shrink-0">
+              <input type="checkbox" checked={!!doc.requerDadosPedido} onChange={e=>setForm(f=>({...f, documentosExigidos: f.documentosExigidos.map((d,idx)=>idx===i?{...d,requerDadosPedido:e.target.checked}:d)}))} />
+              Pedido médico (CID/data/descrição)
+            </label>
+            <button type="button" onClick={()=>setForm(f=>({...f, documentosExigidos: f.documentosExigidos.filter((_,idx)=>idx!==i)}))} className="text-red-500 text-xs px-1 flex-shrink-0">Remover</button>
+          </div>
+        ))}
+        <button type="button" onClick={()=>setForm(f=>({...f, documentosExigidos: [...(f.documentosExigidos||[]), {id:"doc"+Date.now(), nome:"", requerDadosPedido:false}]}))} className="text-teal-600 text-xs font-medium hover:underline">+ Adicionar documento</button>
+      </div>
+
       <div className="flex justify-end gap-2 mt-4">
         <button onClick={onClose} className="px-4 py-2 text-sm rounded-lg border border-slate-300">Cancelar</button>
         <button onClick={()=>onSave(form)} className="px-4 py-2 text-sm rounded-lg bg-teal-600 text-white hover:bg-teal-700">Salvar</button>
@@ -7053,7 +7168,256 @@ function SetPasswordScreen({email, onDone}) {
   );
 }
 
+// ---------------- Link público de cadastro do paciente ----------------
+// RN pedida explicitamente pelo usuário: link que o paciente recebe e usa para se cadastrar sozinho,
+// enviando os documentos exigidos pelo convênio (variam por plano — ver Convenio.documentosExigidos),
+// com o sistema conferindo os dados do pedido médico (CID, data, descrição) antes de aceitar; se faltar
+// algo, mostra exatamente o que falta. Se estiver tudo certo: "sobe" o documento (simulado — ver decisão
+// abaixo), notifica faturamento ("documento pronto para solicitar guia") e recepção ("novo paciente
+// cadastrado").
+//
+// Limitações assumidas conscientemente neste protótipo (decisões tomadas com o usuário):
+// 1) Sem backend próprio: este projeto é só HTML/JS estático (GitHub Pages) + localStorage. Esta tela lê
+//    e grava nas MESMAS chaves de localStorage que o App usa ("clients", "log", "convenios") — ou seja,
+//    o fluxo completo só sincroniza de fato quando aberto no MESMO navegador/dispositivo do sistema
+//    principal. Um paciente abrindo o link no celular dele NÃO vai aparecer automaticamente para a
+//    clínica em outro computador — isso exigiria migrar a persistência para um banco compartilhado
+//    (Supabase), pendência já documentada e propositalmente adiada para depois desta demonstração.
+// 2) "Sobe pro Drive" é simulado: o arquivo fica salvo como anexo do cliente (base64), marcado
+//    enviadoDrive:true só para fins de demonstração — não há integração real com a API do Google Drive
+//    (exigiria credenciais/backend próprios, fora do escopo de um protótipo estático).
+// 3) A "conferência" do pedido médico não lê o conteúdo do arquivo enviado (não há OCR/IA de documento
+//    neste protótipo) — o paciente preenche CID, data e descrição em campos de formulário ao lado do
+//    upload, e é isso que o sistema valida.
+const CID_REGEX = /^[A-Za-z][0-9]{2}(\.[0-9]{1,2})?$/;
+
+function lerArquivoBase64(file){
+  return new Promise((resolve, reject) => {
+    if (file.size > 8*1024*1024) { reject(new Error("Arquivo muito grande para este protótipo (máx. ~8MB).")); return; }
+    const reader = new FileReader();
+    reader.onload = (ev) => resolve(String(ev.target.result));
+    reader.onerror = () => reject(new Error("Não foi possível ler o arquivo."));
+    reader.readAsDataURL(file);
+  });
+}
+
+function CadastroPublicoPage() {
+  const [convenios] = useState(() => loadPersisted("convenios", conveniosIniciais));
+  const [tipoPagamento, setTipoPagamento] = useState("convenio"); // "convenio" | "particular" | "bolsa"
+  const [convenioNome, setConvenioNome] = useState("");
+  const [form, setForm] = useState({ nome:"", telefone:"", email:"", cpf:"", dataNascimento:"", endereco:"", telefoneEmergencia:"", medico:"", numeroCarteirinha:"" });
+  const [uploads, setUploads] = useState({}); // { [docId]: {arquivoNome, conteudoBase64, cid, dataPedido, descricaoPedido} }
+  const [erros, setErros] = useState([]);
+  const [enviando, setEnviando] = useState(false);
+  const [sucesso, setSucesso] = useState(null); // nome do paciente após envio
+
+  const conveniosAtivos = useMemo(() => convenios.filter(c => c.ativo && c.nome !== "Particular"), [convenios]);
+  const convenioSelecionado = conveniosAtivos.find(c => c.nome === convenioNome) || null;
+  const documentosExigidos = tipoPagamento === "convenio" && convenioSelecionado ? (convenioSelecionado.documentosExigidos||[]) : [];
+
+  function atualizarUpload(docId, campo, valor){
+    setUploads(u => ({...u, [docId]: {...(u[docId]||{}), [campo]: valor}}));
+  }
+
+  async function handleArquivo(docId, file){
+    if (!file) return;
+    try {
+      const base64 = await lerArquivoBase64(file);
+      setUploads(u => ({...u, [docId]: {...(u[docId]||{}), conteudoBase64: base64, arquivoNome: file.name}}));
+    } catch (e) {
+      window.alert(e.message);
+    }
+  }
+
+  function validar(){
+    const problemas = [];
+    if (!form.nome.trim()) problemas.push("Nome completo é obrigatório.");
+    if (!form.telefone.trim()) problemas.push("Telefone é obrigatório.");
+    if (!form.cpf.trim()) problemas.push("CPF é obrigatório.");
+    if (!form.dataNascimento) problemas.push("Data de nascimento é obrigatória.");
+    if (tipoPagamento === "convenio") {
+      if (!convenioNome) problemas.push("Selecione o convênio.");
+      if (!form.numeroCarteirinha.trim()) problemas.push("Número da carteirinha do convênio é obrigatório.");
+      documentosExigidos.forEach(doc => {
+        const up = uploads[doc.id];
+        if (!up || !up.conteudoBase64) {
+          problemas.push(`Envie o arquivo de "${doc.nome}".`);
+          return;
+        }
+        if (doc.requerDadosPedido) {
+          if (!up.cid || !up.cid.trim()) problemas.push(`Informe o CID do pedido médico ("${doc.nome}").`);
+          else if (!CID_REGEX.test(up.cid.trim())) problemas.push(`CID do pedido médico ("${doc.nome}") em formato inválido — use o padrão CID-10, ex.: M54.5.`);
+          if (!up.dataPedido) problemas.push(`Informe a data do pedido médico ("${doc.nome}").`);
+          if (!up.descricaoPedido || !up.descricaoPedido.trim()) problemas.push(`Informe a descrição do pedido médico ("${doc.nome}").`);
+        }
+      });
+    }
+    return problemas;
+  }
+
+  function handleEnviar(e){
+    e.preventDefault();
+    const problemas = validar();
+    setErros(problemas);
+    if (problemas.length > 0) {
+      window.scrollTo({top:0, behavior:"smooth"});
+      return;
+    }
+    setEnviando(true);
+    const clienteId = "c" + Date.now();
+    const documentosAnexados = documentosExigidos.map(doc => {
+      const up = uploads[doc.id] || {};
+      return {
+        id: "doc" + Date.now() + "_" + doc.id,
+        nome: doc.nome,
+        arquivoNome: up.arquivoNome || "",
+        conteudoBase64: up.conteudoBase64 || "",
+        dataUpload: TODAY,
+        enviadoDrive: true, // simulado — ver nota no topo do arquivo
+        cid: doc.requerDadosPedido ? (up.cid||"").trim() : "",
+        dataPedido: doc.requerDadosPedido ? (up.dataPedido||"") : "",
+        descricaoPedido: doc.requerDadosPedido ? (up.descricaoPedido||"").trim() : "",
+      };
+    });
+    const novoCliente = {
+      id: clienteId, nome: form.nome.trim(), telefone: form.telefone.trim(), email: form.email.trim(),
+      endereco: form.endereco.trim(), dataNascimento: form.dataNascimento, cpf: form.cpf.trim(),
+      numeroCarteirinha: tipoPagamento==="convenio" ? form.numeroCarteirinha.trim() : "",
+      convenio: tipoPagamento==="convenio" ? convenioNome : "",
+      pagamento: {tipo: tipoPagamento, numeroGuia:""},
+      medico: form.medico.trim(), telefoneEmergencia: form.telefoneEmergencia.trim(),
+      tratamento:"", pacoteNome:"", sessoesTotal:0, dataInicio: TODAY, profissionaisIds:[], valorSessao:0,
+      alta:null, horariosFixos:[], produtoId:null, descontoAplicado:0, parcelas:1, biometriaCadastrada:false,
+      observacoes:"", origemCadastro:"link_publico", documentosAnexados,
+    };
+    const clientesAtuais = loadPersisted("clients", initialClients);
+    savePersisted("clients", [...clientesAtuais, novoCliente]);
+
+    // Notificações (RN pedida explicitamente pelo usuário): registradas no mesmo log/canal "Push" já
+    // usado no resto do sistema. Como esta tela roda no navegador do PACIENTE (sem login), o disparo real
+    // de notificação de navegador (Web Notification API) não faz sentido aqui — só apareceria na tela do
+    // paciente, não da equipe. O que fica garantido é o registro no log compartilhado, visível para
+    // faturamento/recepção na aba Notificações assim que abrirem o sistema (no mesmo navegador — ver nota
+    // de limitação no topo do arquivo).
+    const logAtual = loadPersisted("log", []);
+    const novasEntradas = [
+      {id: Date.now()+1, ts:"agora", canal:"Push", msg: `📎 Documentos de ${novoCliente.nome} prontos para solicitar guia (faturamento).`},
+      {id: Date.now()+2, ts:"agora", canal:"Push", msg: `🧾 Novo paciente cadastrado: ${novoCliente.nome} (recepção).`},
+    ];
+    savePersisted("log", [...novasEntradas, ...logAtual].slice(0,30));
+
+    setEnviando(false);
+    setSucesso(novoCliente.nome);
+  }
+
+  if (sucesso) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-slate-100 p-4">
+        <div className="bg-white rounded-2xl shadow-md border border-slate-200 p-8 w-full max-w-md text-center">
+          <div className="text-3xl mb-3">✅</div>
+          <div className="text-lg font-semibold text-slate-800 mb-2">Cadastro enviado!</div>
+          <p className="text-sm text-slate-500 mb-4">Obrigado, {sucesso}. Recebemos seus dados e documentos. Nossa equipe vai revisar e entrar em contato para agendar sua avaliação.</p>
+          <p className="text-[11px] text-slate-400">Protótipo de demonstração — este cadastro fica salvo apenas neste navegador.</p>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="min-h-screen bg-slate-100 py-8 px-4">
+      <div className="max-w-xl mx-auto">
+        <div className="text-center mb-6">
+          <div className="text-xl font-bold text-teal-700">PhysioFlow</div>
+          <div className="text-sm text-slate-500">Cadastro de paciente</div>
+        </div>
+
+        {erros.length > 0 && (
+          <div className="bg-red-50 border border-red-200 text-red-700 rounded-xl p-4 mb-4 text-sm">
+            <div className="font-medium mb-1">Antes de enviar, corrija:</div>
+            <ul className="list-disc list-inside space-y-0.5">
+              {erros.map((e,i) => <li key={i}>{e}</li>)}
+            </ul>
+          </div>
+        )}
+
+        <form onSubmit={handleEnviar} className="bg-white rounded-2xl shadow-sm border border-slate-200 p-6 space-y-4">
+          <div>
+            <div className="text-sm font-medium text-slate-700 mb-2">Seus dados</div>
+            <div className="grid grid-cols-2 gap-3">
+              <Field label="Nome completo"><input className={inputCls} value={form.nome} onChange={e=>setForm({...form,nome:e.target.value})} /></Field>
+              <Field label="Telefone"><input className={inputCls} value={form.telefone} onChange={e=>setForm({...form,telefone:e.target.value})} /></Field>
+              <Field label="E-mail"><input type="email" className={inputCls} value={form.email} onChange={e=>setForm({...form,email:e.target.value})} /></Field>
+              <Field label="CPF"><input className={inputCls} value={form.cpf} onChange={e=>setForm({...form,cpf:e.target.value})} /></Field>
+              <Field label="Data de nascimento"><DateInput value={form.dataNascimento} onChange={v=>setForm({...form,dataNascimento:v})} /></Field>
+              <Field label="Telefone de emergência"><input className={inputCls} value={form.telefoneEmergencia} onChange={e=>setForm({...form,telefoneEmergencia:e.target.value})} /></Field>
+              <div className="col-span-2"><Field label="Endereço"><input className={inputCls} value={form.endereco} onChange={e=>setForm({...form,endereco:e.target.value})} /></Field></div>
+              <div className="col-span-2"><Field label="Médico responsável (opcional)"><input className={inputCls} value={form.medico} onChange={e=>setForm({...form,medico:e.target.value})} /></Field></div>
+            </div>
+          </div>
+
+          <div className="border-t border-slate-100 pt-4">
+            <div className="text-sm font-medium text-slate-700 mb-2">Como você paga o tratamento?</div>
+            <div className="flex gap-1 bg-slate-100 rounded-lg p-1 w-fit mb-3">
+              {[["convenio","Convênio"],["particular","Particular"],["bolsa","Bolsa"]].map(([id,label]) => (
+                <button type="button" key={id} onClick={()=>setTipoPagamento(id)} className={"px-3 py-1.5 rounded-md text-xs font-medium " + (tipoPagamento===id ? "bg-white shadow text-teal-700" : "text-slate-500")}>{label}</button>
+              ))}
+            </div>
+            {tipoPagamento === "convenio" && (
+              <div className="grid grid-cols-2 gap-3">
+                <Field label="Convênio">
+                  <select className={inputCls} value={convenioNome} onChange={e=>{setConvenioNome(e.target.value); setUploads({});}}>
+                    <option value="">Selecione...</option>
+                    {conveniosAtivos.map(c => <option key={c.id} value={c.nome}>{c.nome}</option>)}
+                  </select>
+                </Field>
+                <Field label="Nº da carteirinha"><input className={inputCls} value={form.numeroCarteirinha} onChange={e=>setForm({...form,numeroCarteirinha:e.target.value})} /></Field>
+              </div>
+            )}
+          </div>
+
+          {documentosExigidos.length > 0 && (
+            <div className="border-t border-slate-100 pt-4">
+              <div className="text-sm font-medium text-slate-700 mb-1">Documentos exigidos pelo {convenioNome}</div>
+              <p className="text-[11px] text-slate-400 mb-3">Envie uma foto ou PDF de cada documento abaixo.</p>
+              <div className="space-y-3">
+                {documentosExigidos.map(doc => {
+                  const up = uploads[doc.id] || {};
+                  return (
+                    <div key={doc.id} className="border border-slate-200 rounded-lg p-3">
+                      <div className="text-sm font-medium text-slate-700 mb-1">{doc.nome}</div>
+                      <input type="file" accept="image/*,application/pdf" onChange={e=>handleArquivo(doc.id, e.target.files[0])} className="text-xs" />
+                      {up.arquivoNome && <div className="text-[11px] text-teal-600 mt-1">✓ {up.arquivoNome}</div>}
+                      {doc.requerDadosPedido && (
+                        <div className="grid grid-cols-2 gap-2 mt-2">
+                          <Field label="CID"><input className={inputCls} placeholder="Ex.: M54.5" value={up.cid||""} onChange={e=>atualizarUpload(doc.id,"cid",e.target.value)} /></Field>
+                          <Field label="Data do pedido"><DateInput value={up.dataPedido||""} onChange={v=>atualizarUpload(doc.id,"dataPedido",v)} /></Field>
+                          <div className="col-span-2"><Field label="Descrição do pedido"><input className={inputCls} value={up.descricaoPedido||""} onChange={e=>atualizarUpload(doc.id,"descricaoPedido",e.target.value)} /></Field></div>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          <button type="submit" disabled={enviando} className="w-full px-4 py-2.5 text-sm rounded-lg bg-teal-600 text-white hover:bg-teal-700 disabled:opacity-50 font-medium">
+            {enviando ? "Enviando..." : "Enviar cadastro"}
+          </button>
+          <p className="text-[11px] text-slate-400 text-center">Seus dados e documentos são usados apenas para o atendimento na clínica, conforme a LGPD.</p>
+        </form>
+      </div>
+    </div>
+  );
+}
+
 function AuthGate() {
+  // Link público de cadastro (RN pedida explicitamente pelo usuário): ?cadastro=1 bypassa totalmente o
+  // login — é a página que o paciente abre a partir do link compartilhado pela recepção/gestão.
+  const modoCadastroPublico = useMemo(() => new URLSearchParams(window.location.search).get("cadastro") === "1", []);
+  if (modoCadastroPublico) {
+    return <CadastroPublicoPage />;
+  }
   const [session, setSession] = useState(undefined); // undefined = carregando, null = deslogado
   const [profile, setProfile] = useState(undefined); // undefined = carregando, null = sem perfil, obj = ok
   const [erroPerfil, setErroPerfil] = useState("");
